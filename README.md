@@ -4,4 +4,4 @@ Bizzo Jasmine 1023240 jasmine.bizzo@edu.unito.it
 
 Marco Chavez
 
-Cojocaru Andreea 1064397 andreea.cojocaru860@edu.unito.it
+Cojocaru Andreea 1064397 andreea.cojocaru860@edu.unito.it (T1)
