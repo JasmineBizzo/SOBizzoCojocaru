@@ -1,4 +1,4 @@
-#include <stdio.h>
+##include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -14,18 +14,18 @@
 #define MIN_N_ATOMICO 20 
 
 int main() {
-	int i, n, m_id, s_id;
+	int i, n, m_id, s_id, p;
 	struct stat_data * my_stat;
 	struct shared_data * my_data;
 	
-	s_id=shmget(IPC_PRIVATE, sizeof(*my_stat), 0600); //creazione area di memoria condivisa
+	s_id=shmget(getpid() + 1, sizeof(*my_stat), 0600 | IPC_CREAT); //creazione area di memoria condivisa
 	my_stat=shmat(s_id, NULL, 0); // collegare l'area a un puntatore
 	
-	m_id=shmget(IPC_PRIVATE, sizeof(*my_data), 0600); //creazione area di memoria condivisa
+	m_id=shmget(getpid() + 2, sizeof(*my_data), 0600 | IPC_CREAT); //creazione area di memoria condivisa
 	my_data=shmat(m_id, NULL, 0); // collegare l'area a un puntatore
 	
 	// inizio a salvare in sm i dati del master	
-	my_data->pid[0] = getpid();  // parent process -  master
+	my_data->pid[0] = getpid();  // parent process - master
 	my_data->id[0] = 0; 
     my_data->num_atomico[0]=150;
 	
@@ -48,15 +48,15 @@ int main() {
        	// crea tot processi e salva i loro dati in sm
        	for(i=0; i<2; i++) { 
 		
-		if(fork() == 0){ // children processes - atomo 
+		if(p = fork() == 0){ // children processes - atomo 
 			
 			sleep(1);
 			// sops.sem_op = -1;
 			// semop(s_id, &sops, 1);
 			
 			my_data->pid[my_data->j+=1] = getpid();
-                	my_data->id[my_data->j] = my_data->j;
-			my_data->num_atomico[my_data->j]=rand()%102+1; 
+            my_data->id[my_data->j] = my_data->j;
+			my_data->num_atomico[my_data->j]=rand()%118+1; 
 			// da riguardare da random: 
 			// ci possono essere atomi con lo stesso numero atomico?
 			
@@ -65,7 +65,12 @@ int main() {
 			printf("NUM_ATOMICO: %d \n",my_data->num_atomico[my_data->j]);
 			printf("\n");
 			exit(0); // per ora, termino i processi - problemi di sync
-		} 
+		} else if(p == -1) {
+			printf("Terminazione per meltdown.");
+		}
+
+
+
 		sleep(2);
 		
 
@@ -105,15 +110,25 @@ int main() {
         } else {
         	printf("Effettua scissione\n");
         	printf("\n");
-        	num /= 2;
+
         	my_data->num_atomico[n] = num;// cambiamo il num_atomico del padre
         	printf("NUM POST: %d \n", num);
+
         	// fork
         	if(!fork()){
         		sleep(1);
+				//gestione del numero dispari 
+				if (num % 2 == 0) {
+					num /= 2;
+        			my_data->num_atomico[n] = num;// cambiamo il num_atomico del padre
+				} else {
+					num /= 2;
+        			my_data->num_atomico[n] = num+1;// cambiamo il num_atomico del padre
+				}
+
         		my_data->pid[my_data->j+=1] = getpid();
-                	my_data->id[my_data->j] = my_data->j;
-			my_data->num_atomico[my_data->j]=num; 
+            	my_data->id[my_data->j] = my_data->j;
+				my_data->num_atomico[my_data->j]=num; 
 			// da riguardare da random: 
 			// ci possono essere atomi con lo stesso numero atomico?
 			printf("DATI NUOVO ATOMO: \n");
@@ -122,7 +137,7 @@ int main() {
 			printf("NUM_ATOMICO: %d \n",my_data->num_atomico[my_data->j]);
 			printf("\n");
 			
-			
+			my_stat->num_scissioni += 1;	
 			my_stat->energy = (num*num)-num;
 			
 			exit(0); // per ora, termino i processi - problemi di sync
@@ -145,18 +160,11 @@ int main() {
         
         
         // chiudo le sm
-        shmdt(my_stat);
-	shmctl(s_id, IPC_RMID, NULL); // deallocare la shared memory, viene cancellato dopo però
+    shmdt(my_stat);
+	//shmctl(s_id, IPC_RMID, NULL); // deallocare la shared memory, viene cancellato dopo però
 	
 	shmdt(my_data);
-	shmctl(m_id, IPC_RMID, NULL);
+	//shmctl(m_id, IPC_RMID, NULL);
 	
 	return 0;
-	
-}        
-        
-        
-        
-        
-        		
-
+}                
