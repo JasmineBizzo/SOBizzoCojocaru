@@ -1,7 +1,12 @@
-#include <signal.h>
-#include <errno.h>
+#include <signal.h> //consente l'utilizzo delle funzioni per la gestione dei segnali fra processi
+#include <errno.h> /*definisce la variabile intera errno, che e' impostato dalle system call e da alcune funzioni di libreria nel
+                   file evento di errore per indicare cosa e' andato storto*/
 #include <stdlib.h>
-#include <unistd.h>
+#include <unistd.h> // definisce costanti e tipi simbolici vari e dichiara funzioni varie.
+#include "shared-memory.h"
+#include <stdio.h>
+#include <time.h>
+#include <stdint.h>
 
 //so_days == sim_duration
 int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO, STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
@@ -12,6 +17,13 @@ void check_inputs(); //???? lascio?
 void secPrint(int *, int *, int *, int *, int); //la stampa fatta ogni secondo (daily)
 void finalReport(int *, int *, int *, int *, int *, int *, int *, int);
 void endSimulation(pid_t *, pid_t *, pid_t);
+
+struct shared_data {
+	int j;
+        int id[100];
+        pid_t pid[100];
+	int num_atomico[100]; 
+};
 
 /*DA FINIRE?
 void handler(int signal){ // DEVO riportare la causa della terminazione
@@ -25,13 +37,18 @@ void handler(int signal){ // DEVO riportare la causa della terminazione
 } */
 
 int main(int argc, char * argv[]){
-pid_t * pidAtomi;
+int shm_pidAtomi_id;
+struct shared_data * shmPidAtomi;
 
 int sem_config_id = 0;
 
+int i, n, m_id, s_id;
+	struct stat_data * my_stat; // energy e scorie
+	struct shared_data * my_data; // dati atomi
+
 char * args_atomi[]  = {"atomo.c", NULL};
-char * args_pAtt[] = {"pAttivatore.c", NULL};
-char * args_pAlim[] = {"pAlimentazione.c", NULL};
+char * args_pAtt[] = {"attivatore.c", NULL};
+char * args_pAlim[] = {"alimentazione.c", NULL};
 
 /**
   //  int ;
@@ -74,87 +91,35 @@ char * args_pAlim[] = {"pAlimentazione.c", NULL};
 */
     check_inputs();
 
-    pidAtomi = malloc(sizeof(pidAtomi) * N_ATOMI_INIT);
+            //pidAtomi = malloc(sizeof(pidAtomi) * N_ATOMI_INIT);
 
-    //SHARED MEMORY
+ 
     //array che coniene tutti i pid degli atomi, parent pid + 1
-    shm_pidAtomi_id = shmget(getpid() + 1, sizeof(pid_t) * N_ATOMI_INIT, 0600 | IPC_CREAT);
-    shmPidAtomi = shmat(shm_pidAtomi_id, NULL, 0); 
-    //array che contiene tutti i numeri atomici SERVE???
+   // shm_pidAtomi_id = shmget(getpid() + 1, sizeof(pid_t) * N_ATOMI_INIT, 0600 | IPC_CREAT);
+     //shmPidAtomi = shmat(shm_pidAtomi_id, NULL, 0); 
 
-    /**
-     * SHARED MEMORY
-     * 
-     * parent pid + 1: lista Merce per simulazione
-     * parent pid + 2: matrice indicante quali Merce possono essere richieste da ciascun porto
-     * parend pid + 3: matrice indicante quali offerte possono essere richieste da ciascun porto
-     * parent pid + 4: posizione porti
-     * parent pid + 5: gestione generazione offerte e richieste dai porti
-     * parent pid + 6: matrice di tutte le merci richieste da tutti i porti
-     * parent pid + 7: matrice di tutte le merci offerte da tutti i poorti
-     * parent pid + 8: array che conta il quantitativo di merci consegnate da tutte le navi
-     * parent pid + 9: array che visualizza lo status delle navi nel corso della simulazione
-     * parent pid + 10: array che salva tutti gli status delle merci in corso della simulazione
-     * parent pid + 11: array che va a salvare i porti con l'offerta maggiore di una specifica merce
-     * parent pid + 12: array che va a salvare i porti che hanno effettuato il maggior numero di richieste
-     * parent pid + 13: array che contiene i pid delle navi
-     * parent pid + 14: array che contiene i pid dei porti
-     * parent pid + 15: array il quale contiene le statistiche merci all'interno di uno specifico porto
-     * parent pid + 16: array dei porti che sono stati colpiti dalla mareggiata
+    /**SHARED MEMORY
+     * parent pid + 1: Dati per la stampa ogni secondo
+     * parent pid + 2: Pid e numero atomico degli atomi
     */
-/**
+
+    s_id=shmget(getpid() + 1, sizeof(*my_stat), 0600| IPC_CREAT); //creazione area di memoria condivisa
+	my_stat=shmat(s_id, NULL, 0); // collegare l'area a un puntatore
+	
+	m_id=shmget(getpid() + 2, sizeof(*my_data), 0600| IPC_CREAT); // sizeof(int)*n_atom_init*x ???
+	my_data=shmat(m_id, NULL, 0);
+    
+
+    /** parent pid + 16: array dei porti che sono stati colpiti dalla mareggiata
+
     shm_merci_id = shmget(getpid() + 1, sizeof(Merce) * SO_MERCI, 0600 | IPC_CREAT);
     tipi_merci = shmat(shm_merci_id, NULL, 0);
-    
     shm_richieste_id = shmget(getpid() + 2, sizeof(int) * ((SO_MERCI + 1)*SO_PORTI), 0600 | IPC_CREAT);
     arr_richieste = shmat(shm_richieste_id, NULL, 0);
-
-    shm_offerte_id = shmget(getpid() + 3, sizeof(int) * ((SO_MERCI + 1) * SO_PORTI), 0600 | IPC_CREAT);
-    arr_offerte = shmat(shm_offerte_id, NULL, 0);
-
-    shm_pos_porti_id = shmget(getpid() + 4, sizeof(double) * (SO_PORTI * 3), 0600 | IPC_CREAT);
-    arr_pos_porti = shmat(shm_pos_porti_id, NULL, 0);
-
-    shm_porti_selezionati_id = shmget(getpid() + 5, sizeof(int), 0600 | IPC_CREAT);
-    porti_selezionati = shmat(shm_porti_selezionati_id, NULL, 0);
-
-    shm_richieste_global_id = shmget(getpid() + 6, sizeof(int) * ((SO_MERCI + 1) * SO_PORTI), 0600 | IPC_CREAT);
-    arr_richieste_global = shmat(shm_richieste_global_id, NULL, 0);
-
-    shm_offerte_global_id = shmget(getpid() + 7, sizeof(int) * ((SO_MERCI + 1) * SO_PORTI), 0600 | IPC_CREAT);
-    arr_offerte_global = shmat(shm_offerte_global_id, NULL, 0);
-
-    shm_merci_cosegnate_id = shmget(getpid() + 8, sizeof(int) * SO_MERCI, 0600 | IPC_CREAT);
-    merci_consegnate = shmat(shm_merci_cosegnate_id, NULL, 0);
-
-    shm_statusNavi_id = shmget(getpid() + 9, sizeof(int) * SO_NAVI * 6, 0600 | IPC_CREAT);
-    statusNavi = shmat(shm_statusNavi_id, NULL, 0);
-
-    shm_statusMerci_id = shmget(getpid() + 10, sizeof(int) * (SO_MERCI) * 5, 0600 | IPC_CREAT);
-    statusMerci = shmat(shm_statusMerci_id, NULL, 0);
-
-    shm_maxOfferte_id = shmget(getpid() + 11, sizeof(int) * SO_MERCI * 2, 0600 | IPC_CREAT);
-    maxOfferte = shmat(shm_maxOfferte_id, NULL, 0);
-
-    shm_maxRichieste_id = shmget(getpid() + 12, sizeof(int) * SO_MERCI * 2, 0600 | IPC_CREAT);
-    maxRichieste = shmat(shm_maxRichieste_id, NULL, 0);
-
-    shm_pidNavi_id = shmget(getpid() + 13, sizeof(pid_t) * SO_NAVI, 0600 | IPC_CREAT);
-    shmPidNavi = shmat(shm_pidNavi_id, NULL, 0);
-
-    shm_pidPorti_id = shmget(getpid() + 14, sizeof(pid_t) * SO_PORTI, 0600 | IPC_CREAT);
-    shmPidPorti = shmat(shm_pidPorti_id, NULL, 0);
-
-    shm_statusPorti_id = shmget(getpid() + 15, sizeof(int) * SO_PORTI * 6, 0600 | IPC_CREAT);
-    statusPorti = shmat(shm_statusPorti_id, NULL, 0);
-
-    shm_portiSwell_id = shmget(getpid() + 16, sizeof(int) * SO_DAYS, 0600 | IPC_CREAT);
-    portiSwell = shmat(shm_portiSwell_id, NULL, 0);
-    /*Fine allocazione delle shared memory*/
+*/
 
     /**
      * SEMAFORI
-     * 
      * parent pid + 0: fine configuarazione iniziale, la simulazione parte solo dopo che tutto e' stato inizializzato
      * // CANC parent pid + 1: fine creazione matrice richieste/offerte dei porti
     */
@@ -168,10 +133,15 @@ char * args_pAlim[] = {"pAlimentazione.c", NULL};
    
     while(wait(NULL) != - 1);////
 
-    /**
-     * Generazione dei primi 4 porti su ogni lato della mappa
-     * generazione degli n atomi iniziali
-    */
+
+   // inizio a salvare in sm i dati del master	
+	my_data->pid[0] = getpid();  // parent process - master
+	my_data->id[0] = 0; 
+    my_data->num_atomico[0]=150;
+	
+	my_data->j=0; // inizializzo il puntatore della sh my_data
+
+ //Creazione dell'atomo circa
 
     for(i = 0; i < N_ATOMI_INIT; i++){
         switch (pidAtomi[i] = fork()){
@@ -180,60 +150,20 @@ char * args_pAlim[] = {"pAlimentazione.c", NULL};
                 kill -KILL pidAtomi[i]; // vedi se funz
                // exit(-1);
             case 0:
+                my_data->pid[my_data->j+=1] = getpid();
+                my_data->id[my_data->j] = my_data->j;
+			    my_data->num_atomico[my_data->j]=rand()%118+1;
+
                 sprintf(argv_buffer, "%d", (i+1));
                 args_atomo[1] = argv_buffer;
-                execve("../bin/atomo", args_atomo, NULL); //???????? path
+                execve("../bin/atomo", args_atomo, NULL); //???????? path args = 'atomo.c'
                 exit(0); 
                 break;
             default:
             break;
         }
-    }
-    
-  //  args_atomo[1] = " ";  ///??
-    
-    /**
-     * Creazione restanti porti
-  
-    for(i = 4; i < SO_PORTI; i++){
-        switch (pidPorti[i] = fork())
-        {
-            case -1:
-                printf("C'è stato un errore nel fork per i porti: %s", strerror(errno));
-                exit(-1);
-                break;
-            case 0:
-                execve("../bin/porti", args_porti , NULL);
-                exit(0);
-                break;
-            default:
-            break;
-        }
-    }*/
-
-    //for(i = 0; i < N_ATOMI_INIT; i++){ // non so xk *3 e *6
-      //  arr_pos_atomi[i * 3] = (unsigned int)pidAtomi[i];
-      //  statusAtomi[i * 6] = (unsigned int)pidAtomi[i];
-      //  arr_offerte_global[i * (SO_MERCI + 1)] = (unsigned int)pidPorti[i];
-        //arr_richieste_global[i * (SO_MERCI + 1)] = (unsigned int)pidPorti[i];
-    //}
- 
-    for(i = 0; i < N_ATOMI_INIT; i++){
-        shmPidAtomi[i] = pidAtomi[i];
-    }
-
-   
-
+    }   //  args_atomo[1] = " ";  ///??
     printf("[SISTEMA]\t -> \t TUTTI GLI ATOMI SONO PRONTI\n");
-
-    /**
-     * Dopo aver generato tutti i processi porti, vado a creare le matrici delle richieste e delle offerte,
-     *  creade un semaforo che comunicherà
-     * ai porti quando iniziare a generare le effettive risorse all'interno del loro magazzino
-    */
-
-    //gen_richiesta_offerta(pidNavi, arr_richieste, arr_offerte, 0);
-    //sem_reserve(sem_offerte_richieste_id, 0);
     
     
 //Generazionie PROCESSO ATTIVATORE
@@ -245,33 +175,17 @@ char * args_pAlim[] = {"pAlimentazione.c", NULL};
            // exit(-1);
             break;
          case 0:      
-            execve("../bin/p_attivatore", args_navi , NULL); //?????????? path
+            execve("../bin/attivatore", args_attivatore , NULL); //?????????? path args = 'attivatore.c'
             exit(- 1);
             break;
             default:
             break;
-        }
-
-
-   /* for(i = 0; i < SO_NAVI; i++){
-        statusNavi[i * 6] = (unsigned int)pidNavi[i];
-        statusNavi[(i * 6) + 1] = 1;
-    }*/
-
+    }
     printf("[SISTEMA]\t -> \t IL PROCESSO ATTIVATORE E' PRONTO\n");
 
     
-  /**  
-    for(i = 0; i < SO_NAVI; i++){
-        shmPidNavi[i] = pidNavi[i];
-    }
-    for(i = 0; i < SO_PORTI; i++){
-        shmPidPorti[i] = pidPorti[i];
-    }/*
-
- /**
-     * Generazione processo ALIMENTAZIONE
-    */
+//Generazione processo ALIMENTAZIONE
+    
     switch(pid_pAliment = fork()){
         case -1:
             printf("C'è stato un errore nel fork per il processo alimentazione: %s", strerror(errno));
@@ -279,7 +193,7 @@ char * args_pAlim[] = {"pAlimentazione.c", NULL};
             //exit(-1);
             break;
         case 0:
-            execve("../bin/p_alimentazione", args_meteo , NULL);
+            execve("../bin/alimentazione", args_alimentazione , NULL); // args = 'alimentazione.c'
             exit(0);
         default:
         break;
@@ -287,15 +201,6 @@ char * args_pAlim[] = {"pAlimentazione.c", NULL};
     printf("[SISTEMA]\t -> \t IL PROCESSO ALIMENTAZIONE E' PRONTO\n");
 
 
-    /**
-     * La simulazione effettiva comincia qui
-     * All'inizio del ciclo while vengono scelti un numero casuale si porti i quali dovranno generare risorse all'interno del loro magazzino
-     * Tali porti verranno scelti a caso, non ripetuti, in modo che non si verichi un possibile merge di segnali
-     * I porti che giorno N sono stati scelti riceveranno dal master un segnale SIGUSR2 il quale comunicherà ai porti di creare le proprie Merce
-     * allHarborIndex = array che contiene tutti i numeri che vanno da 0 a SO_PORTI - 1
-     * harborIndexNoRepeat = array che contiene indici casuali non ripetuti per la selezione dei porti ogni giorno
-     * remeinignHarbor = array che contiene tutti i restanti indici dei porti non scelti da harborIndexNoRepeat
-    */
 
     int i = 0; //indice dei secondi che passano
     int k = 0;
@@ -308,8 +213,6 @@ char * args_pAlim[] = {"pAlimentazione.c", NULL};
     }
     i = 0;
     while(i != SIM_DURATION /*&& flagEndMaterials && !flagEndMaelstrom*/){ //cambio so_days in sim_duration
-       
-       
        // checkEndOffers = 0;
        // checkEndRequests = 0;
        // * porti_selezionati = (rand() % (SO_PORTI - 3)) + 4;
@@ -397,6 +300,7 @@ char * args_pAlim[] = {"pAlimentazione.c", NULL};
         req.tv_sec = 1;
         req.tv_nsec = 0;
         nanosleep(&req, &rem);
+
         //secPrint
         dailyPrint(statusNavi, statusMerci, statusPorti, portiSwell, i);
         for(x = 1; x <= SO_MERCI; x++){
@@ -441,6 +345,11 @@ char * args_pAlim[] = {"pAlimentazione.c", NULL};
     shmdt(shmPidPorti);
     shmdt(statusPorti);
     shmdt(portiSwell);
+
+
+    //nostri 2
+    shmctl(s_id, IPC_RMID, NULL); 
+    shmctl(m_id, IPC_RMID, NULL);
 
     shmctl(shm_merci_id, IPC_RMID, NULL);
     shmctl(shm_richieste_id, IPC_RMID, NULL);
@@ -662,141 +571,81 @@ void gen_richiesta_offerta(int * pidPorti, int * arr_richieste, int * arr_offert
 */
 
 void check_inputs(){
-    const char * file_path = "../src/env_var.txt"; ////////////////???????
+    const char * file_path = "../src/env_var.txt"; ////PATH!
     char buffer[1024];
     char buffer_cpy[1024];
     ssize_t bytes_read;
     char * token;
     FILE * file_descriptor = fopen(file_path, "r");
-    
 
     if (!file_descriptor) {
         perror("Failed to open the file");
     }
 
-    while (fgets(buffer, 1024, file_descriptor)){
+    while (fgets(buffer, 1024, file_descriptor)){ // CAMBIA switch case!
         token = strtok(buffer, " ");
-        if(strcmp(token, "SO_NAVI") == 0){
+        if(strcmp(token, "ENERGY_DEMAND") == 0){
             token = strtok(NULL, " ");
-            SO_NAVI = atoi(token);
-        }else if(strcmp(token, "SO_PORTI") == 0){
+            ENERGY_DEMAND = atoi(token);
+        }else if(strcmp(token, "N_ATOMI_INIT") == 0){
             token = strtok(NULL, " ");
-            SO_PORTI = atoi(token);
-        }else if(strcmp(token, "SO_MERCI") == 0){
+            N_ATOMI_INIT = atoi(token);
+        }else if(strcmp(token, "MIN_N_ATOMICO") == 0){
             token = strtok(NULL, " ");
-            SO_MERCI = atoi(token);
-        }else if(strcmp(token, "SO_SIZE") == 0){
+            MIN_N_ATOMICO = atoi(token);
+        }else if(strcmp(token, "STEP_ATTIVATORE") == 0){
             token = strtok(NULL, " ");
-            SO_SIZE = atoi(token);
-        }else if(strcmp(token, "SO_MIN_VITA") == 0){
+            STEP_ATTIVATORE = atoi(token);
+        }else if(strcmp(token, "STEP_ALIMENTAZIONE") == 0){
             token = strtok(NULL, " ");
-            SO_MIN_VITA = atoi(token);
-        }else if(strcmp(token, "SO_MAX_VITA") == 0){
+            STEP_ALIMENTAZIONE = atoi(token);
+        }else if(strcmp(token, "N_NUOVI_ATOMI") == 0){
             token = strtok(NULL, " ");
-            SO_MAX_VITA = atoi(token);
-        }else if(strcmp(token, "SO_LATO") == 0){
+            N_NUOVI_ATOMI = atoi(token);
+        }else if(strcmp(token, "SIM_DURATION") == 0){
             token = strtok(NULL, " ");
-            SO_LATO = atoi(token);
-        }else if(strcmp(token, "SO_SPEED") == 0){
+            SIM_DURATION = atoi(token);
+        }else if(strcmp(token, "ENERGY_EXPLODE_THRESHOLD") == 0){
             token = strtok(NULL, " ");
-            SO_SPEED = atoi(token);
-        }else if(strcmp(token, "SO_CAPACITY") == 0){
-            token = strtok(NULL, " ");
-            SO_CAPACITY = atoi(token);
-        }else if(strcmp(token, "SO_BANCHINE") == 0){
-            token = strtok(NULL, " ");
-            SO_BANCHINE = atoi(token);
-        }else if(strcmp(token, "SO_FILL") == 0){
-            token = strtok(NULL, " ");
-            SO_FILL = atoi(token);
-        }else if(strcmp(token, "SO_LOADSPEED") == 0){
-            token = strtok(NULL, " ");
-            SO_LOADSPEED = atoi(token);
-        }else if(strcmp(token, "SO_DAYS") == 0){
-            token = strtok(NULL, " ");
-            SO_DAYS = atoi(token);
-        }else if(strcmp(token, "SO_STORM_DURATION") == 0){
-            token = strtok(NULL, " ");
-            SO_STORM_DURATION = atoi(token);
-        }else if(strcmp(token, "SO_SWELL_DURATION") == 0){
-            token = strtok(NULL, " ");
-            SO_SWELL_DURATION = atoi(token);
-        }else if(strcmp(token, "SO_MAELESTROM") == 0){
-            token = strtok(NULL, " ");
-            SO_MAELESTROM = atoi(token);
-        }else if(strcmp(token, "PRINT_MERCI") == 0){
-            token = strtok(NULL, " ");
-            PRINT_MERCI = atoi(token);
-        }else if(strcmp(token, "CONVERSION_SEC_NSEN") == 0){
-            token = strtok(NULL, " ");
-            CONVERSION_SEC_NSEN = atoi(token);
+            ENERGY_EXPLODE_THRESHOLD = atoi(token);
         }
     }
     fclose(file_descriptor);
 
-    if(SO_PORTI < 4 || SO_PORTI > 2000){
-        if(SO_PORTI < 4){
-            printf("[SISTEMA]\t -> \t ERRORE: IL NUMERO DI PORTI INSERITO E' INSUFFICENTE, BISOGNA INSERIRNE ALMENO 4\n");
-            exit(- 1);
-        }
-        else if(SO_PORTI > 2000){
-            printf("[SISTEMA]\t -> \t ERRORE: IL NUMERO DI PORTI INSERITO E' TROPPO GRANDE, BISOGNA INSERIRNE MENO DI 2000 \n");
-            exit(- 1);
-        }
-    }
-    else if(SO_NAVI < 1 || SO_NAVI > 5000){
-        if(SO_NAVI < 1){
-            printf("[SISTEMA]\t -> \t ERRORE: IL NUMERO DI NAVI INSERITO E' < 0, BISOGNA INSERIRNE ALMENO UN NUMERO > 0\n");
-            exit(- 1);
-        }
-        else if(SO_NAVI > 5000){
-            printf("[SISTEMA]\t -> \t ERRORE: IL NUMERO DI NAVI INSERITO E' TROPPO ALTO, INSERISCINE MENO DI 5000\n");
-            exit(- 1);
-        }
-    }
-    else if(SO_MIN_VITA > SO_MAX_VITA || SO_MIN_VITA < 0 || SO_MAX_VITA < 0){
-        if(SO_MIN_VITA < 0){
-            printf("[SISTEMA] \t -> \t ERRORE: LA DATA DI SCADENZA MINIMA NON PUO' ESSERE UN NUMERO NEGATIVO\n");
-            exit(- 1);
-        }
-        else if(SO_MAX_VITA < 0){
-            printf("[SISTEMA] \t -> \t ERRORE: LA DATA DI SCADENZA MASSIMA NON PUO' ESSERE UN NUMERO NEGATIVO\n");
-            exit(- 1);
-        }
-        else{
-            printf("[SISTEMA]\t -> \t ERRORE: LA DATA DI SCADENZA MINIMA NON PUO' ESSRE MAGGIORE DELLA SCADENZA MASSIMA\n");
-            exit(- 1);
-        }
-    }
-    else if(SO_LATO < 100){
-        printf("[SISTEMA]\t ->  \t ERRORE: IL LATO DELLA MAPPA DEVE ESSERE >= 100\n");
+    if(ENERGY_DEMAND < 0){
+        printf("[SISTEMA]\t -> \t ERRORE: IL NUMERO DI ENERGY_DEMAND DEVE ESSERE MAGGIORE DI 0\n");
         exit(- 1);
     }
-    else if(SO_SPEED < 50){
-        printf("[SISTEMA]\t -> \t ERRORE: LA VELOCITA' DELLE NAVI DEVE ESSERE UN NUMERO >= 50\n");
+    else if(N_ATOMI_INIT < 0){
+        printf("[SISTEMA]\t -> \t ERRORE: IL NUMERO DI ATOMI INIZIALE DEVE ESSERE MAGGIORE DI 0\n");
         exit(- 1);
     }
-    else if(SO_CAPACITY < 10){
-        printf("[SISTEMA]\t -> \t ERRORE: LA CAPACITA' DELLE NAVI DEVE ESSERE UN NUMERO >= 10\n");
+    else if(MIN_N_ATOMICO < 1 || MIN_N_ATOMICO > 118){
+        printf("[SISTEMA]\t -> \t ERRORE: IL NUMERO ATOMICO DEVE ESSERE COMPRESO TRA 1 E 118\n");
         exit(- 1);
     }
-    else if(SO_BANCHINE < 1){
-        printf("[SISTEMA]\t -> \t ERRORE: LE BANCHINE PER PORTO DEVE ESSERE UN NUMERO >= 1\n");
+    else if(STEP_ATTIVATORE > 0){
+        printf("[SISTEMA]\t -> \t ERRORE: LO STEP ATTIVATORE NON PUO' NON ESSERE PRESENTE\n");
         exit(- 1);
     }
-    else if(SO_FILL < 1000){
-        printf("[SISTEMA]\t -> \t ERRORE: SO_FILL DEVE ESSERE UN NUMERO >= 1000\n");
+    else if(STEP_ALIMENTAZIONE > 0){
+        printf("[SISTEMA]\t -> \t ERRORE: LO STEP ALIMENTAZIONE NON PUO' NON ESSERE PRESENTE\n");
         exit(- 1);
     }
-    else if(SO_LOADSPEED < 50){
-        printf("[SISTEMA]\t -> \t ERRORE: LA VELOCITA' DI SCARICO DEVE ESSERE UN NUMERO >= 50\n");
+    else if(N_NUOVI_ATOMI < 0){
+        printf("[SISTEMA]\t -> \t ERRORE: IL NUMERI DI NUOVI ATOMI DA CREARE NON PUO' ESSERE 0\n");
         exit(- 1);
     }
-    else if(SO_DAYS < 5){
-        printf("[SISTEMA]\t -> \t ERRORE: SO_DAYS DEVE ESSERE UN NUMERO >= 5\n");
+    else if(SIM_DURATION < 0){
+        printf("[SISTEMA]\t -> \t ERRORE: LA SIMULAZIONE NON PUO' DURARE 0 SECONDI\n");
+        exit(- 1);
+    }
+    else if(ENERGY_EXPLODE_THRESHOLD < 0){
+        printf("[SISTEMA]\t -> \t ERRORE: IL THRESHOLD NON PUO' ESSERE 0\n");
         exit(- 1);
     }
 }
+
 //secPrint dailyPrint
 void secPrint(int * statusNavi, int * statusMerci, int * statusPorti, int * portiSwell, int secondo){
     /**
@@ -807,7 +656,7 @@ void secPrint(int * statusNavi, int * statusMerci, int * statusPorti, int * port
     • quantit`a di scorie prodotte (totale e relativa all’ultimo secondo);
     */
 
-   
+
     int carico = 0;
     int noCarico = 0;
     int operandoPorto = 0;
