@@ -11,13 +11,59 @@
 //#define MAX(x,y) (((x) > (y)) > (x) : (y))
 // tanto padre e figlio hanno lo stesso num atomico lol
 
-#define MIN_N_ATOMICO 20 
+//#define MIN_N_ATOMICO 20 
+int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
+int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
+int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
+
 
 int main() {
 	int i, n, m_id, s_id, p;
 	struct stat_data * shm_stat;
 	struct shared_data * shm_data;
 	
+	///////
+	int sem_config_id; //qui passo lo stesso sem del master, ma non so ancora gestirlo
+	int sem_reserve(int sem_id, int sem_num);
+
+	sem_config_id = semget(getppid(), 1, 0600 | IPC_CREAT);
+	sem_reserve(sem_config_id, 0);
+	///////
+
+	 /**SHARED MEMORY
+     * parent pid + 1: array dei dati necessari per la stampa shm_stat[i]
+     * parent pid + 2: array dei pid 
+     * parent pid + 3: array dei numeri atomici
+     * 
+     * shm_stat[0] = int energy; 
+	 * shm_stat[1] = int energy_sec;
+     * shm_stat[2] = int energy_used; 
+	 * shm_stat[3] = int energy_used_sec;
+     * shm_stat[4] = int scorie; 
+     * shm_stat[5] = int scorie_sec; 
+     * shm_stat[6] = int num_scissioni; 
+     * shm_stat[7] = int num_scissioni_sec; 
+     * shm_stat[8] = int num_attivazioni;
+	 * shm_stat[9] = int num_attivazioni_sec;
+     * 
+     * shm_stat[10] = energia generata dagli atomi, da cui il master preleva l'Energy Demand;
+    */
+
+	int num_atom_tot = N_ATOMI_INIT + (N_NUOVI_ATOMI*(SIM_DURATION/STEP_ALIMENTAZIONE));
+
+    int stat_id, /*atom_id,*/ * atom_pid_id, atom_num_id;
+    int * shm_stat, /* * shm_atom_id,*/ * shm_atom_pid, * shm_atom_num;
+
+    stat_id = shmget(getpid() + 1, sizeof(int) *11, 0600 | IPC_CREAT); //creazione area di memoria condivisa
+	shm_stat = shmat(stat_id, NULL, 0); //collegare l'area a un puntatore
+
+    atom_pid_id = shmget(getpid() + 2, sizeof(int) * num_atom_tot, 0600 | IPC_CREAT); ///size????
+	shm_atom_pid = shmat(atom_pid_id, NULL, 0);
+
+    atom_num_id = shmget(getpid() + 3, sizeof(int) * num_atom_tot, 0600 | IPC_CREAT); //size?
+	shm_atom_num = shmat(atom_num_id, NULL, 0);
+
+	/*
 	s_id=shmget(getpid() + 1, sizeof(*shm_stat), 0600 | IPC_CREAT); //creazione area di memoria condivisa
 	shm_stat=shmat(s_id, NULL, 0); // collegare l'area a un puntatore
 	
@@ -35,21 +81,20 @@ int main() {
         printf("*PID: %d \n",shm_data->pid[0]);
         printf("*NUM_ATOMICO %d \n", shm_data->num_atomico[0]);
         printf("\n");
-	
+	*/
+
 	// inizializzo i valori della sm shm_stat
-		shm_stat->energy = 100;  
-        shm_stat->scorie = 0;
+		shm_stat[0] = 100;  
+        shm_stat[4] = 0;
         
         printf("STAT PROVVISORIE\n");
-        printf("ENERGY: %d \n", shm_stat->energy);
-        printf("SCORIE: %d \n", shm_stat->scorie);
+        printf("ENERGY: %d \n", shm_stat[0]);
+        printf("SCORIE: %d \n", shm_stat[4]);
        	printf("\n");
        	
        	// crea tot processi e salva i loro dati in sm
 		// si potrebbe fare (tot_processi_da_creare /2) visto che dovrebbero bastare la metà delle fork
        	for(i=0; i<2; i++) { 
-	
-
 
 		//aggiungere il controllo se fork fallisce -> termina simulazione
 		if(p = fork() == 0){ // children processes - atomo 
@@ -70,13 +115,11 @@ int main() {
 			printf("\n");
 			exit(0); // per ora, termino i processi - problemi di sync
 		} else if(p == -1) {
-			printf("Terminazione per meltdown.");
+			 printf("[SISTEMA]\t -> \t MELTDOWN: ERRORE NEL FORK PER LA CREAZIONE DEGLI ATOMI INIZIALI\n");
+            //kill TERMINA handler aiut
 		}
 
-
-
 		sleep(2);
-		
 	}
        	
        	int z = shm_data->j;
@@ -98,7 +141,7 @@ int main() {
         }while(b!=shm_data->j); 
         
         sleep(1);
-        // sciossione
+        // scissione
 		int num = 20;
         // int num = shm_data->num_atomico[n]; // num atomico del padre
         printf("NUM: %d \n", num);
@@ -148,14 +191,10 @@ int main() {
         	shm_stat->energy = (num*num)-num;
         }
        	
-         
-        
         
         // printf("*NUM_ATOMICO = %d \n", shm_data->num_atomico[n]);
                 
         //incrementiamo l'energia 
-        
-        
         
         printf("STAT POST SCISSIONE\n");
         printf("ENERGY: %d \n", shm_stat->energy);
@@ -169,4 +208,4 @@ int main() {
 	//shmctl(m_id, IPC_RMID, NULL);
 	
 	return 0;
-}             
+}        
