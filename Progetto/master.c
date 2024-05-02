@@ -1,44 +1,44 @@
-#include <signal.h> //consente l'utilizzo delle funzioni per la gestione dei segnali fra processi
-#include <errno.h> //definisce errno, variabile impostata da system call e funzioni di libreria nel per indicare cosa e' andato storto
+#include <signal.h> //utilizzo delle funzioni per la gestione dei segnali fra processi
+#include <errno.h> //errno, variabile per indicare cosa e' andato storto
 #include <stdlib.h>
-#include <unistd.h> //definisce costanti e tipi simbolici vari e dichiara funzioni varie.
-#include "shared-memory.h"
+#include <unistd.h> //costanti e tipi simbolici vari e dichiara funzioni varie.
+//#include "shared-memory.h"
 #include <stdio.h>
 #include <time.h>
 #include <stdint.h>
-#include <sys/types.h> //senza questo non mi fa usare pid_t??
+#include <sys/types.h> //per pid_t
 #include <sys/shm.h> //per shm
+#include <sys/sem.h> //per sem
 
-//so_days == sim_duration
-int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO, STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
-int SIM_DURATION;
-int ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD, avaliable_energy; //data dagli atomi, da cui prevelo energy_demand ogni sec
+int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
+int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
+int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-void check_in(); 
-void secPrint(struct stat_data, int); //la stampa fatta ogni secondo (daily)
-void finalReport(struct stat_data *, int);
-void endSimulation(pid_t *); //uccido anche attivatore e alimentazione?
+void check_in();
+void secPrint(int *, int);
+void endSimulation(int*, pid_t *, pid_t *, int, int *, int *, int, int, int, int);
+// VECCHIO endSimulation(int*, pid_t *, pid_t *, int);
 
-/*DA FINIRE
-void handler(int signal){ // DEVO riportare la causa della terminazione
+//DA FINIRE e CAPIRE
+void handler(int signal){
     switch (signal){
         case SIGABRT:
-         printf("[SISTEMA] -> LA SIMULAZIONE E' TERMINATA\n");/////////
+         printf("\n");/////////
          //   flag =1;
+         case SIGTERM:
+         endSimulation();
         default:
         break;
     }
-} */
+} 
 
 int main(int argc, char * argv[]){
     int sem_config_id = 0;
 
-    int i, l, n, m_id, s_id;
-    struct stat_data * shm_stat; // tutte le statistiche
-    struct shared_data * shm_data; // dati atomi
+    int i, l, n;
 
-    pid_t * pidAtomi, pidAttivatore, pidAliment;
-    pidAtomi = malloc(sizeof(pidAtomi) * N_ATOMI_INIT);
+    pid_t pidAttivatore, pidAliment; 
+    //pidAtomi = malloc(sizeof(pidAtomi) * N_ATOMI_INIT); Non lo uso più, uso shm
     pidAttivatore = malloc(sizeof(pidAttivatore));
     pidAliment= malloc(sizeof(pidAliment));
 
@@ -47,50 +47,61 @@ int main(int argc, char * argv[]){
     char * args_aliment[] = {"alimentazione.c", NULL};
     char argv_buffer[50];
 
-/**
-    sigset_t mask_block;
-   struct sigaction sa;
-    //int i, j, k, status, errno;
-   // int sem_config_id = 0, sem_offerte_richieste_id = 0;
-   // int * harborIndexNoRepeat, * allHarborIndex, * remeaningHarbor;
-    pid_t * pidNavi, * pidPorti, pid_meteo;
-   
+    /**  sigset_t mask_block;
+    struct sigaction sa;
+    int i, j, k, status, errno;
+    int * harborIndexNoRepeat, * allHarborIndex, * remeaningHarbor;
     int flag = 1;
     int flagDecision = 0;
     char argv_buffer[50];
     char * args_navi[]  = {"navi.c", NULL};
     struct timespec req, rem;
-    
     sigemptyset(&mask_block);
     sigaddset(&mask_block, SIGINT);
     sigprocmask(SIG_BLOCK, &mask_block, NULL);
-
     s(getpid());
     bzero(&sa, sizeof(sa));
     sa.sa_handler = handler;
     sa.sa_flags = SA_RESTART;
-    sigaction(SIGABRT, &sa, NULL);
-*/
+    sigaction(SIGABRT, &sa, NULL);  */
 
     check_in();
 
     /**SHARED MEMORY
-     * parent pid + 1: Dati per la stampa ogni secondo
-     * parent pid + 2: Pid e numero atomico degli atomi
+     * parent pid + 1: array dei dati necessari per la stampa shm_stat[i]
+     * parent pid + 2: array dei pid 
+     * parent pid + 3: array dei numeri atomici
+     * 
+     * shm_stat[0] = int energy; 
+	 * shm_stat[1] = int energy_sec;
+     * shm_stat[2] = int energy_used; 
+	 * shm_stat[3] = int energy_used_sec;
+     * shm_stat[4] = int scorie; 
+     * shm_stat[5] = int scorie_sec; 
+     * shm_stat[6] = int num_scissioni; 
+     * shm_stat[7] = int num_scissioni_sec; 
+     * shm_stat[8] = int num_attivazioni;
+	 * shm_stat[9] = int num_attivazioni_sec;
+     * 
+     * shm_stat[10] = energia generata dagli atomi, da cui il master preleva l'Energy Demand;
     */
 
-    s_id=shmget(getpid() + 1, sizeof(*shm_stat), 0600 | IPC_CREAT); //creazione area di memoria condivisa
-	shm_stat=shmat(s_id, NULL, 0); // collegare l'area a un puntatore
+    int num_atom_tot = N_ATOMI_INIT + (N_NUOVI_ATOMI*(SIM_DURATION/STEP_ALIMENTAZIONE));
+
+    int stat_id, /*atom_id,*/ * atom_pid_id, atom_num_id;
+    int * shm_stat, /* * shm_atom_id,*/ * shm_atom_pid, * shm_atom_num;
+
+    stat_id = shmget(getpid() + 1, sizeof(int) *11, 0600 | IPC_CREAT); //creazione area di memoria condivisa
+	shm_stat = shmat(stat_id, NULL, 0); //collegare l'area a un puntatore
 	
-	m_id=shmget(getpid() + 2, sizeof(*shm_data), 0600| IPC_CREAT); // sizeof(int)*n_atom_init*x ???
-	shm_data=shmat(m_id, NULL, 0);
-    
-/** parent pid + 16: array dei porti che sono stati colpiti dalla mareggiata
-    shm_merci_id = shmget(getpid() + 1, sizeof(Merce) * SO_MERCI, 0600 | IPC_CREAT);
-    tipi_merci = shmat(shm_merci_id, NULL, 0);
-    shm_richieste_id = shmget(getpid() + 2, sizeof(int) * ((SO_MERCI + 1)*SO_PORTI), 0600 | IPC_CREAT);
-    arr_richieste = shmat(shm_richieste_id, NULL, 0);
-    */
+	//atom_id = shmget(getpid() + 2, sizeof(int) * num_atom_tot, 0600 | IPC_CREAT); ///size?????
+	//shm_atom_id = shmat(atom_id, NULL, 0);
+
+    atom_pid_id = shmget(getpid() + 2, sizeof(int) * num_atom_tot, 0600 | IPC_CREAT); ///size????
+	shm_atom_pid = shmat(atom_pid_id, NULL, 0);
+
+    atom_num_id = shmget(getpid() + 3, sizeof(int) * num_atom_tot, 0600 | IPC_CREAT); //size?
+	shm_atom_num = shmat(atom_num_id, NULL, 0);
 
     /**
      * SEMAFORI
@@ -98,71 +109,51 @@ int main(int argc, char * argv[]){
      * // CANC parent pid + 1: fine creazione matrice richieste/offerte dei porti
     */
 
-// sem_config_id = semget(getpid(), 1, 0600 | IPC_CREAT);
-   // sem_set_val(sem_config_id, 0, (SO_NAVI + SO_PORTI + 1));//////////////?? nella lib
+    sem_config_id = semget(getpid(), 1, 0600 | IPC_CREAT);
+    sem_set_val(sem_config_id, 0, (N_ATOMI_INIT + 2));
+    //Valore = il num di p atomo che creo inizialmente + 1 per il p attivatore + 1 per il p alimentazione
+    //Quando il valore sarà 0, ovvero tutti i p saranno stati creati, inizierà la simulazione
 
-//sem_offerte_richieste_id = semget(getpid() + 1, 1, 0600 | IPC_CREAT);
-    //sem_set_val(sem_offerte_richieste_id, 0, 1);
-
-   
     while(wait(NULL) != - 1);////??
 
-   //inizio a salvare in shm i dati del master	
-	shm_data->pid[0] = getpid();  // parent process - master
-	shm_data->id[0] = 0; 
-    shm_data->num_atomico[shm_data->j]=rand()%118+1; 
-			// da riguardare da random: mettere N_ATOM_MAX
-	shm_data->j=0; // inizializzo il puntatore della sh shm_data
-
-    //Non so se questo serve
-    shm_stat->energy = 0; 
-	shm_stat->energy_used = 0;
-	shm_stat->scorie = 0; 
-	shm_stat->num_scissioni = 0; 
-	shm_stat->num_attivazioni = 0;
-	
-	shm_stat->energy_sec = 0; 
-	shm_stat->energy_used_sec = 0;
-	shm_stat->scorie_sec = 0; 
-	shm_stat->num_scissioni_sec = 0; 
-	shm_stat->num_attivazioni_sec = 0;
-
-
+   //Non essendo il master un atomo, questo probably non serve: Inizializzazione shm con pid del master
+	shm_atom_pid[0] = getpid(); 
+    shm_atom_num[0]= 0;
+			
 
     //Creazione degli n ATOMI iniziali
-
     for(i = 0; i < N_ATOMI_INIT; i++){
-        switch (pidAtomi[i] = fork()){
+       // int count = 0;
+        switch (shm_atom_pid[i] = fork()){
             case -1:
                 printf("C'è stato un errore nella scissione (fork) di un atomo: %s", strerror(errno));
                 exit(-1); 
-               //kill -KILL pidAtomi[i]; // vedi se funz
+                //kill (pid, SIGABORT) 
             case 0:
-                shm_data->pid[shm_data->j+=1] = getpid();
-                shm_data->id[shm_data->j] = shm_data->j;
-			    shm_data->num_atomico[shm_data->j]=rand()%118+1;
-
+                shm_atom_pid[i] = getpid(); // è giusto??
+                shm_atom_num[i]=rand()%118+1;
+                        ///Cambia da random a max num atomico!!
                 sprintf(argv_buffer, "%d", (i+1));
                 args_atomi[1] = argv_buffer;
-                execve("../bin/atomo", args_atomi, NULL); //???????? path args = 'atomo.c'
+                execve("../bin/atomo", args_atomi, NULL); //???????? args atomi = pid del master
                 exit(0); 
                 break;
             default:
             break;
         }
+        //count ++;
     }   //  args_atomo[1] = " ";  ///??
     printf("[SISTEMA]\t -> \t TUTTI GLI ATOMI SONO PRONTI\n");
     
     //Generazione processo ATTIVATORE
-    
-   switch (pidAttivatore = fork()){
+    switch (pidAttivatore = fork()){
         case -1:
             printf("C'è stato un errore nel fork per il processo attivatore: %s", strerror(errno));
               exit(-1); 
-               //kill -KILL pidAtomi[i]; // vedi se funz
+               //fai
             break;
          case 0:      
-            execve("../bin/attivatore", args_attivatore, NULL); //?????????? path args = 'attivatore.c'
+            execve("../bin/attivatore", args_attivatore, NULL); //?????????? path args = 'attivatore.c' o pid master
             exit(- 1);
             break;
             default:
@@ -171,107 +162,80 @@ int main(int argc, char * argv[]){
     printf("[SISTEMA]\t -> \t IL PROCESSO ATTIVATORE E' PRONTO\n");
 
     
-    //Generazione processo ALIMENTAZIONE
-    
+    //Generazione processo ALIMENTAZIONE 
     switch(pidAliment = fork()){
         case -1:
             printf("C'è stato un errore nel fork per il processo alimentazione: %s", strerror(errno));
             exit(-1); 
-               //kill -KILL pidAtomi[i]; // vedi se funz
+               //fai
             break;
         case 0:
-            execve("../bin/alimentazione", args_aliment, NULL); // args = 'alimentazione.c'
+            execve("../bin/alimentazione", args_aliment, NULL); // args = 'alimentazione.c' o pid master
             exit(0);
         default:
         break;
     }
     printf("[SISTEMA]\t -> \t IL PROCESSO ALIMENTAZIONE E' PRONTO\n");
     
+
     printf("[SISTEMA]\t -> \t INIZIO DELLA SIMULAZIONE\n");
 
+    while(semctl(sem_config_id, 0, GETVAL) != 0); //Rimango qui fin quando il semaforo non è a 0,
+                                                //ovvero fin quando non sono stati creati tutti i processi
     int i = 0; //indice dei secondi che passano
-    int k = 0;
-   
-    while(semctl(sem_config_id, 0, GETVAL) != 0); //semaforo a noi serve??
-    * porti_selezionati = SO_PORTI;
-    for(i = 0; i < SO_PORTI; i++){
-        kill(pidPorti[i], SIGUSR1);
-    }
-    i = 0;
-
-
     while(i != SIM_DURATION){ //SE SERVE metto delle flags qui per interrompere la sim
-        //cambio so_days in sim_duration
+       //prima attendo con un semaforo che tutti gli atomi si siano scissi
        
-    /** FAI ENERGY DEMAND
-     * Prima ricevo l'energia liberata dagli atomi, poi prelevo
-     * 
-     * 
-    */
-
-    /* o passo questi uno per uno? xo non sto usando la sm
-    int energy; // energia creata
-	int energy_used; // energia consumata
-	int scorie; 
-	int num_scissioni; 
-	int num_attivazioni;
-	
-	
-	int energy_sec; // energia creata nell'ultimo secondo
-	int energy_used_sec; // energia consumata nell'ultimo sec
-	int scorie_sec; 
-	int num_scissioni_sec; 
-	int num_attivazioni_sec;*/
-
-
-        secPrint(shm_stat, i); // PARAMETRI DA CAPIRE
-
-
-        for(x = 1; x <= SO_MERCI; x++){
-            for(y = 0; y < SO_PORTI; y++){
-                checkEndOffers += arr_offerte_global[y * (SO_MERCI + 1) + x];
-                checkEndRequests += arr_richieste_global[y * (SO_MERCI + 1) + x];
-            }
+    //PRELIEVO DELL'ENERGY DEMAND
+        shm_stat[10] = shm_stat[10] - ENERGY_DEMAND;
+        if(shm_stat[10] > ENERGY_EXPLODE_THRESHOLD){
+            printf("[SISTEMA]\t -> \t EXPLODE: L \'ENERGIA LIBERATA E\' MAGGIORE DEL THRESHOLD\n");
+            //kill
         }
-        if(checkEndOffers == 0 || checkEndRequests == 0){
-            flagEndMaterials = 0;
+        else if(shm_stat[10] < 0){//è corretto leggendo la consegna???
+            printf("[SISTEMA]\t -> \t BLACKOUT: L \'ENERGIA CHE SI VUOLE PRELEVARE NON E\' DISPONIBILE\n");
+            //kill
         }
-        
-        free(harborIndexNoRepeat);
-        if(SO_PORTI > 4 && * porti_selezionati != SO_PORTI){
-            free(remeaningHarbor);
-        }
-        printf("[SISTEMA]\t -> \t IL TEMPO DI SIMULATIONE E' TERMINATO\n");
+            
+        secPrint(shm_stat, i);
+        i ++;
     }
-    
+    printf("[SISTEMA]\t -> \t IL TEMPO DI SIMULATIONE IMPOSTATO E' TERMINATO\n");
+
     //Fine sumulazione, invio un SIGABRT a tutti i processi indicandogli di terminare
-    endSimulation(shmPidPorti, shmPidNavi, pid_meteo);
+    endSimulation(shm_atom_pid, pidAttivatore, pidAliment, num_atom_tot,    
+                    shm_stat, shm_atom_num, stat_id, atom_pid_id, atom_num_id,
+                    sem_config_id);
+    // VECCHIO endSimulation(shm_atom_pid, pidAttivatore, pidAliment, num_atom_tot);
 
     while(wait(NULL) != -1);
     
-    finalReport(shm_stat, i);
-    
+    //SPOSTO per facilitare in caso di Handler - Terminazione, da vedere se è giusto!
+    /*
     //Faccio detach e dealloco tutte le variabili delle shared memories
     shmdt(shm_stat);
-	shmdt(shm_data);
-  
-    shmctl(s_id, IPC_RMID, NULL); 
-    shmctl(m_id, IPC_RMID, NULL);
+	shmdt(shm_atom_pid);
+    shmdt(shm_atom_num);
+    
+    shmctl(stat_id, IPC_RMID, NULL); 
+    shmctl(atom_pid_id, IPC_RMID, NULL);
+    shmctl(atom_num_id, IPC_RMID, NULL);
 
     //semafori
     semop(sem_config_id, NULL, IPC_RMID);
-    semop(sem_offerte_richieste_id, NULL, IPC_RMID);
+    //semop(sem_offerte_richieste_id, NULL, IPC_RMID);
     
     //malloc
-    free(pidNavi);
-    free(pidPorti);
-    free(allHarborIndex);
+    free(pidAttivatore);
+    free(pidAliment);
+    */
+    
+    printf("[SISTEMA] -> SIMULAZIONE TERMINATA CON SUCCESSO\n");
 
-    printf("[SISTEMA] -> SIMULAZIONE TERMINATA\n");
-
+    /*??????????????????
     sigemptyset(&mask_block);
     sigaddset(&mask_block, SIGINT);
-    sigprocmask(SIG_UNBLOCK, &mask_block, NULL);
+    sigprocmask(SIG_UNBLOCK, &mask_block, NULL);*/
 }
 
 //Controllo iniziale sui parametri inseriti nel file input
@@ -394,116 +358,74 @@ void check_in(){
 }
 
 //Eseguo la print ogni secondo
-void secPrint(struct stat_data shm_stat, int sec){
-    int i, n, m_id, s_id, p;
-	struct stat_data * shm_stat;
-    s_id=shmget(getpid() + 1, sizeof(*shm_stat), 0600 | IPC_CREAT); //creazione area di memoria condivisa
-	shm_stat=shmat(s_id, NULL, 0); // collegare l'area a un puntatore
-	
-	
- //prime 4 righe non so che sono ma per ora lascio e non so cosa sono i numeri dopo la quadra
+void secPrint(int * shm_stat, int sec){
     printf("\033[0;33m");
-    printf("----------------------------------------------------------------------------------------------\n");
+    printf("------------------------------------------------------------------------------------\n");
+    //printf("\033[0m");
+    //printf("\033[1;31m");
+    printf("AL SECONDO\t->\t[%d]\n", sec);
     printf("\033[0m");
-    printf("\033[1;31m");
-    printf("SECONDO\t->\t[%d]\n", sec);
-    printf("\033[0m");
     printf("\n");
-    printf("LE ATTIVAZIONI NELL\'ULTIMO SECONDO SONO STATE\t->\t[\033[1;32m%d\033[0m]\n", shm_stat.num_attivazioni_sec);
-    printf("LE ATTIVAZIONI TOTALI SONO STATE\t->\t[\033[1;32m%d\033[0m]\n", shm_stat.num_attivazioni);
+    printf("LE ATTIVAZIONI NELL\'ULTIMO SECONDO SONO STATE\t->\t[\033[1;32m%d\033[0m]\n", shm_stat[9]);
+    printf("LE ATTIVAZIONI TOTALI SONO STATE\t->\t[\033[1;32m%d\033[0m]\n", shm_stat[8]);
     printf("\n");
-    printf("LE SCISSIONI NELL\'ULTIMO SECONDO SONO STATE\t->\t[\033[1;32m%d\033[0m]\n", shm_stat.num_scissioni_sec);
-    printf("LE SCISSIONI TOTALI SONO STATE\t->\t[\033[1;32m%d\033[0m]\n", shm_stat.num_scissioni);
+    printf("LE SCISSIONI NELL\'ULTIMO SECONDO SONO STATE\t->\t[\033[1;32m%d\033[0m]\n", shm_stat[7]);
+    printf("LE SCISSIONI TOTALI SONO STATE\t->\t[\033[1;32m%d\033[0m]\n", shm_stat[6]);
     printf("\n");
-    printf("L\'ENERGIA PRODOTTA NELL\'ULTIMO SECONDO E\' STATA\t->\t[\033[1;32m%d\033[0m]\n", shm_stat.energy_sec);
-    printf("L\'ENERGIA PRODOTTA TOTALE E\' \t->\t[\033[1;32m%d\033[0m]\n", shm_stat.energy);
+    printf("L\'ENERGIA PRODOTTA NELL\'ULTIMO SECONDO E\' STATA\t->\t[\033[1;32m%d\033[0m]\n", shm_stat[1]);
+    printf("L\'ENERGIA PRODOTTA TOTALE E\' \t->\t[\033[1;32m%d\033[0m]\n", shm_stat[0]);
     printf("\n");
-    printf("L\'ENERGIA CONSUMATA NELL\'ULTIMO SECONDO E\' STATA\t->\t[\033[2;32m%d\033[0m]\n", shm_stat.energy_used_sec);
-    printf("L\'ENERGIA CONSUMATA TOTALE E\' \t->\t[\033[2;32m%d\033[0m]\n", shm_stat.energy_used);
+    printf("L\'ENERGIA CONSUMATA NELL\'ULTIMO SECONDO E\' STATA\t->\t[\033[2;32m%d\033[0m]\n", shm_stat[3]);
+    printf("L\'ENERGIA CONSUMATA TOTALE E\' \t->\t[\033[2;32m%d\033[0m]\n", shm_stat[2]);
     printf("\n");
-    printf("LE SCORIE PRODOTTE NELL\'ULTIMO SECONDO SONO STATE\t->\t[\033[0;32m%d\033[0m]\n", shm_stat.scorie_sec);
-    printf("LE SCORIE PRODOTTE TOTALI SONO STATE\t->\t[\033[0;32m%d\033[0m]\n", shm_stat.scorie);
+    printf("LE SCORIE PRODOTTE NELL\'ULTIMO SECONDO SONO STATE\t->\t[\033[0;32m%d\033[0m]\n", shm_stat[5]);
+    printf("LE SCORIE PRODOTTE TOTALI SONO STATE\t->\t[\033[0;32m%d\033[0m]\n", shm_stat[4]);
     printf("\n");
     printf("\033[0;33m");
-    printf("----------------------------------------------------------------------------------------------\n");
+    printf("------------------------------------------------------------------------------------\n");
     printf("\033[0m");
 
-    //Poi azzero le statistiche _sec
-    shm_stat.energy_sec = 0; 
-	shm_stat.energy_used_sec = 0;
-	shm_stat.scorie_sec = 0; 
-	shm_stat.num_scissioni_sec = 0; 
-	shm_stat.num_attivazioni_sec = 0;
+    //Poi azzero le statistiche relative all'ultimo secondo _sec
+    shm_stat[1]= 0; 
+	shm_stat[3]= 0;
+	shm_stat[5]= 0; 
+	shm_stat[7] = 0; 
+	shm_stat[9] = 0;
 }
 
-void finalReport(struct stat_data shm_stat, int sec){
-    int carico = 0;
-    int noCarico = 0;
-    int operandoPorto = 0;
-    int naviAbbattute = 0;
-    int naviBloccate = 0;
-    int merciTot = 0;
+//Invio un SIGABRT a tutti i processi indicandogli di terminare
+void endSimulation (int * shm_atom_pid, pid_t * pidAttivatore, pid_t * pidAliment, int num_atom_tot,
+                    int * shm_stat, int * shm_atom_num, int stat_id, int atom_pid_id, int atom_num_id,
+                    int sem_config_id){ 
+                                 //devo killare anche alimentazione e attivatore giusto?
     int i;
-
-    printf("\033[0;36m");
-    printf("\n\n\n\n\n\n----------------------------------------------------------------------------------------------\n\n[SISTEMA]\t->\tREPORT FINALE\n\n");
-    printf("\033[0m");
-    printf("[SISTEMA] -> LA SIMULAZIONE E' DURATA %d GIORNI\n\n", sec);
-    if(!flagEndMaterials){
-        printf("[SISTEMA] -> TUTTE LE RICHIESTE SODDISFATTE OPPURE L'OFFERTA E' PARI A 0\n");
-    }
-    if(flagEndMaelstrom){
-        printf("[SISTEMA] -> TUTTE LE NAVI SONO STATE COLPITE DAL MAELSTROM\n");
-    }
-    for(i = 0; i < SO_NAVI; i++){
-        noCarico += statusNavi[(i * 6) + 1];
-        carico += statusNavi[(i * 6) + 2];
-        operandoPorto += statusNavi[(i * 6) + 3];
-        naviAbbattute += statusNavi[(i * 6) + 4];
-        naviBloccate += statusNavi[(i * 6) + 5];
-    }
-    printf("NAVI IN VIAGGIO SENZA CARICO\t->\t[\033[1;32m%d\033[0m]\n", noCarico);
-    printf("NAVI IN VIAGGIO CON CARICO\t->\t[\033[1;32m%d\033[0m]\n", carico);
-    printf("NAVI OPERANDO PRESSO PORTI\t->\t[\033[1;32m%d\033[0m]\n", operandoPorto);
-    printf("NAVI CHE SONO STATE AFFONDATE\t->\t[\033[2;31m%d\033[0m]\n", naviAbbattute);
-    printf("NAVI BLOCCATE DA STORM\t\t->\t[\033[0;31m%d\033[0m]\n", naviBloccate);
-    printf("\n");
-    printf("PORTI BLOCCATI DA SWELL\n");
-    for(i = 0; i < SO_DAYS; i++){
-        printf("[PORTO\t\033[0;31m%d\033[0m]\n", portiSwell[i]);
-    }
-    printf("\n");
-    for(i = 0; i < SO_MERCI; i++){
-        merciTot = statusMerci[(i * 5)] + statusMerci[(i * 5) + 1] + statusMerci[(i * 5) + 2] +  statusMerci[(i * 5) + 3] + statusMerci[(i * 5) + 4];
-        printf("Merce -> %d: totale generata %d, di cui: presente in porto->%d\tpresente in nave->%d\tconsegnata in porto->%d\tscaduta in porto->%d scaduta in nave->%d\n", (i + 1),merciTot, statusMerci[(i*5)], statusMerci[(i*5)+1], merci_consegnate[i], statusMerci[(i*5)+3], statusMerci[(i*5)+4]);
-        printf("\033[2;37m");
-        printf("Porto che ne ha offerta di più -> %d, Porto che ne ha richiesta di più -> %d\n\n", maxOfferte[(i*2)], maxRichieste[(i*2)]);
-        printf("\033[0m");
-    }
-    printf("\n");
-    for(i = 0; i < SO_PORTI; i++){
-         if(i%2 == 0){
-            printf("\033[1;32m");
-        }
-        else{
-            printf("\033[1;35m");
-        }
-        printf("[PORTO -> %d] Merci:\t presenti->%d\tricevute->%d\tspedite->%d\tbanchine->\tlibere %d su %d totali\n", statusPorti[(i * 6)], statusPorti[(i * 6) + 1], statusPorti[(i * 6) + 2], statusPorti[(i * 6) + 3], statusPorti[(i * 6) + 4], statusPorti[(i * 6) + 5]);
-        printf("\033[0m");
-    }
-    printf("\033[0;36m");
-    printf("----------------------------------------------------------------------------------------------\n");
-    printf("\033[0m");
-}
-
-void endSimulation (pid_t * pidAtomi){ //qui devo uccidere tutti i processi, forse dobbiamo tenere conte del numero TOTALE atomi
-                        //devo killare anche alimentazione e attivatore?
-    int i;
-    if(pidAtomi!= NULL){
-        for (i = 0; i < N_ATOM_INIT; i++){
-            if(pidAtomi[i] != -1){
-                kill(pidAtomi[i], SIGABRT);
+    if(shm_atom_pid[i]!= NULL){ //Riga qui sott: lascio così o salviamo in shm il num Totale di atomi creato?
+        for (i = 0; i < num_atom_tot; i++){  
+            if(shm_atom_pid[i] != -1){
+                kill(shm_atom_pid[i], SIGABRT);
             }
         }
     }
+
+    kill(pidAttivatore, SIGABRT);
+
+    kill(pidAliment, SIGABRT);
+
+    //Faccio detach e dealloco tutte le variabili delle shared memories
+    shmdt(shm_stat);
+	shmdt(shm_atom_pid);
+    shmdt(shm_atom_num);
+    
+    shmctl(stat_id, IPC_RMID, NULL); 
+    shmctl(atom_pid_id, IPC_RMID, NULL);
+    shmctl(atom_num_id, IPC_RMID, NULL);
+
+    //semafori
+    semop(sem_config_id, NULL, IPC_RMID);
+    //semop(sem_offerte_richieste_id, NULL, IPC_RMID);
+    
+    //malloc
+    free(pidAttivatore);
+    free(pidAliment);
+    
 }
