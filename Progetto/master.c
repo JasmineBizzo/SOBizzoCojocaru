@@ -79,7 +79,7 @@ int main(int argc, char * argv[]){
      * parent pid + 3: array dei numeri atomici
      * 
      * shm_stat[0] = int energy; totale, non tiene conto dei prelievi del master
-	 * shm_stat[1] = int energy_sec;
+     * shm_stat[1] = int energy_sec;
      * shm_stat[2] = int energy_used; 
 	 * shm_stat[3] = int energy_used_sec;
      * shm_stat[4] = int scorie; 
