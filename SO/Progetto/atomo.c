@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "../lib/ipc.h"
 
 int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
