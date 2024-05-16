@@ -1,11 +1,4 @@
-#include <signal.h> //utilizzo delle funzioni per la gestione dei segnali fra processi
-#include <errno.h> //errno, variabile per indicare cosa e' andato storto
-#include <stdlib.h>
-#include <unistd.h> 
-#include <stdio.h>
-#include <time.h>
-#include <stdint.h>
-#include <sys/types.h> 
+#include "utils.h"
 
 #define SIZE 3
 int * pid_atomo;
