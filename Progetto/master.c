@@ -1,24 +1,9 @@
-#define _GNU_SOURCE //per signal handler
-
-#include <signal.h> //utilizzo delle funzioni per la gestione dei segnali fra processi
-#include <errno.h> //errno, variabile per indicare cosa e' andato storto
-#include <stdlib.h>
-#include <unistd.h> //costanti e tipi simbolici vari e dichiara funzioni varie.
-//#include "shared-memory.h"
-#include <stdio.h>
-#include <time.h>
-#include <stdint.h>
-#include <sys/types.h> //per pid_t
-#include <sys/wait.h>
-#include <sys/shm.h> //per shm
-#include <sys/sem.h> //per sem
-#include <string.h>
+#include "utils.h"
 
 int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-void handle_signal();
 void check_in();
 void secPrint(int *, int);
 void endSimulation();
@@ -42,7 +27,6 @@ void handle_signal(int signal){
 
 int main(int argc, char * argv[]){
     sem_config_id = 0;
-    
 
     //pidAtomi = malloc(sizeof(pidAtomi) * N_ATOMI_INIT); Non lo uso più, uso shm
    // pidAttivatore = malloc(sizeof(pidAttivatore));
@@ -53,6 +37,7 @@ int main(int argc, char * argv[]){
     char * args_aliment[] = {"alimentazione.c", NULL}; 
     char argv_buffer[50];
 
+    struct timespec req; //struct timespec req, rem;
     struct sigaction sa;
     /**  sigset_t mask_block;
     int i, j, k, status, errno;
@@ -61,7 +46,6 @@ int main(int argc, char * argv[]){
     int flagDecision = 0;
     char argv_buffer[50];
     char * args_navi[]  = {"navi.c", NULL};
-    struct timespec req, rem;
     sigemptyset(&mask_block);
     sigaddset(&mask_block, SIGINT);
     sigprocmask(SIG_BLOCK, &mask_block, NULL);
@@ -79,7 +63,7 @@ int main(int argc, char * argv[]){
      * parent pid + 3: array dei numeri atomici
      * 
      * shm_stat[0] = int energy; totale, non tiene conto dei prelievi del master
-     * shm_stat[1] = int energy_sec;
+	 * shm_stat[1] = int energy_sec;
      * shm_stat[2] = int energy_used; 
 	 * shm_stat[3] = int energy_used_sec;
      * shm_stat[4] = int scorie; 
@@ -160,7 +144,7 @@ int main(int argc, char * argv[]){
             break;
          case 0:      
             execve("../SO/attivatore", args_attivatore, NULL); 
-            exit(- 1);
+            exit(0);
             break;
             default:
             break;
@@ -181,7 +165,7 @@ int main(int argc, char * argv[]){
         break;
     }
     printf("IL PROCESSO ALIMENTAZIONE E' PRONTO\n");
-    
+
 
     printf("INIZIO DELLA SIMULAZIONE\n");
 
@@ -204,6 +188,10 @@ int main(int argc, char * argv[]){
             kill(getpid(), SIGTERM);
         }
             
+        req.tv_sec = 1;
+        req.tv_nsec = 0;
+        nanosleep(&req, NULL); //nanosleep(&req, &rem);
+
         secPrint(shm_stat, t);
         t ++;
     }
