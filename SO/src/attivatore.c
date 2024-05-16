@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "../lib/ipc.h"
 
 #define SIZE 3
 int * pid_atomo;
