@@ -106,7 +106,7 @@ int main(int argc, char * argv[]){
    //Non essendo il master un atomo, questo probably non serve: Inizializzazione shm con pid del master
 	shm_atom_pid[0] = getpid(); 
     shm_atom_num[0] = 0;
-			
+		
 
     //Creazione degli ATOMI INIZIALI
     int i;
