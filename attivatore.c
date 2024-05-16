@@ -79,6 +79,7 @@ int main() {
 
 	while (tempo != STEP_ATTIVATORE){
 		choose_atom();
+		tempo++; //come devo contare i secondi??
 	} 
 
 /*
