@@ -73,13 +73,16 @@ int main() {
 	msqid = msgget((getppid()+4), IPC_CREAT | IPC_EXCL | 0600);
 	
 	struct timespec req;
-	req.tv_sec = 1;
-	req.tv_nsec = 0;
-	nanosleep(&req, NULL);
+	;
 
 	while (tempo != STEP_ATTIVATORE){
-		choose_atom();
-		tempo++; //come devo contare i secondi??
+		req.tv_sec = 1;
+		req.tv_nsec = 0;
+		nanosleep(&req, NULL)
+			
+		// choose_atom(); // SERVE DOPO - lo commento ora perchè l'array è ancora vuoto e quindi da errore
+		tempo++; 
+		
 	} 
 
 /*
