@@ -78,7 +78,7 @@ int main() {
 	while (tempo != STEP_ATTIVATORE){
 		req.tv_sec = 1;
 		req.tv_nsec = 0;
-		nanosleep(&req, NULL)
+		nanosleep(&req, NULL);
 			
 		// choose_atom(); // SERVE DOPO - lo commento ora perchè l'array è ancora vuoto e quindi da errore
 		tempo++; 
