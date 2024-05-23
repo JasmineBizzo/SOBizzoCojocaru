@@ -28,13 +28,13 @@ void handle_signal(int signal) {
 
 
 int main(int argc, char * argv[]) {
-	
-	int msqid;
-	int intervallo = STEP_ALIMENTAZIONE;
-	msqid = msgget(PID_SHM + 1, IPC_CREAT | IPC_EXCL | 0600);
-	struct timespec req;
 	srand(time(NULL)); //senza a ogni esecuzione del programma viene sempre estratto lo stesso numero
 
+	int msqid;
+	//int intervallo = STEP_ALIMENTAZIONE;
+	msqid = msgget(PID_SHM + 1, IPC_CREAT | IPC_EXCL | 0600);
+	struct timespec req;
+	
 	struct sigaction sa;
 	bzero(&sa, sizeof(sa));		   // set all bytes to 0
 	sa.sa_handler = handle_signal; // puntatore alla funzione handler dei segnali
@@ -63,20 +63,26 @@ int main(int argc, char * argv[]) {
 	printf("ALIMENTATORE CONTINUA. \n");
 	//SIM_DURATION =5;
 //	N_NUOVI_ATOMI = 2;
-	while (t <= SIM_DURATION){	//(semctl(sem_pid_atomi, 0, GETVAL) == 0 &&
-	
+	while(1){	//(semctl(sem_pid_atomi, 0, GETVAL) == 0 && t <= SIM_DURATION
+		req.tv_sec = 0;
+        req.tv_nsec = 3000; //STEP_ALIMENTAZIONE;
+        nanosleep(&req, NULL);
+
+
 		/*printf("ECCOMI Aliment\n");
 		printf("SIM_DURATION %d \n", SIM_DURATION);
 		printf("N_NUOVI_ATOMI %d \n", N_NUOVI_ATOMI);
 		printf("t %d \n", t); */
-		
-		
-		if(t == intervallo){
-
+		printf("PRIMA FOR aliment\n"); 
+		int i;
+		//if(t == intervallo){
+			// N_NUOVI_ATOMI = 3; /*!!!!*/
+			// N_ATOM_MAX = 10;
+		printf("N_NUOVI_ATOMI: %d \n", N_NUOVI_ATOMI);
 			//int i = shm_stat[11]; //i parte dal numero di atomi creati fino a quel momento
 			//int new = shm_stat[11] + N_NUOVI_ATOMI; //ed arriva a questo
-    		for(int i = 0; i < N_NUOVI_ATOMI; i++) {
-				/*PIPE alimentazione atomo atomo*/
+    		for(i = 0; i < N_NUOVI_ATOMI; i++) {
+				/*PIPE alimentazione atomo atomo
 				int pipefd[2];
     			pipe(pipefd);
 
@@ -85,7 +91,7 @@ int main(int argc, char * argv[]) {
     			int num_bytes;
  				close(pipefd[0]); //chiudi lettura
     			num_bytes = write(pipefd[1], &n, sizeof(n)); //getppid()
-				close(pipefd[1]); // chiusa scrittura
+				close(pipefd[1]); // chiusa scrittura */
 	
 	
 				switch (fork()) {
@@ -93,13 +99,18 @@ int main(int argc, char * argv[]) {
         				printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI IN ALIMENTAZIONE\n");
             			kill(getpid(), SIGABRT);
         			case 0:
+					printf("\n PRIMA INVIO MESSAGGIO IN ALIMENTAZIONE\n");
+					
 						my_msg.mpid = getpid(); 
             			my_msg.mnum_atomico = rand()%((N_ATOM_MAX+1)+1);
+						
 						printf("\n DOPO SEGNALE IL PROCESSO CONTINUA 0 \n");
         				msgsnd(msqid, &my_msg, sizeof(my_msg), 0);
+
+						msgrcv(msqid, &my_msg, sizeof(my_msg), 1, 0);
     	    			kill(shm_stat[13], SIGUSR1);
               //  kill(101010, SIGUSR1);
-				
+						printf("CONTENUTO DELLA CODA: %d, %d", my_msg.mpid, my_msg.mnum_atomico);
 						printf("\n DOPO SEGNALE IL PROCESSO CONTINUA 1 \n");
 
             			execve(ato, args_atomi, NULL); 
@@ -109,14 +120,18 @@ int main(int argc, char * argv[]) {
         		break;
         		}
 				printf("\n DOPO SEGNALE IL PROCESSO CONTINUA 2 \n");
+
+				sem_reserve(sem_writeShm, 0);
+				shm_stat[11] = shm_stat[11] + 1; /*aumento atomi totali*/
+				sem_release(sem_writeShm, 0);
     		}
 			
 		}
 		
 		t++;
-		intervallo += STEP_ALIMENTAZIONE;
+		//intervallo += STEP_ALIMENTAZIONE;
 		printf("\n DOPO SEGNALE IL PROCESSO CONTINUA 3 \n");
-	}
+	//}
 }
 
 void endLocal(){

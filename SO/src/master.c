@@ -10,8 +10,8 @@ void check_in();
 void secPrint(int *, int);
 void endSimulation();
 
-int stat_id;
-int *shm_stat;
+int stat_id, atom_pid;
+int *shm_stat, *shm_atom;
 int sem_pid_atomi, sem_writeShm, sem_att;
 int ind = 0;
 
@@ -37,8 +37,8 @@ void handle_signal(int signal)
 int main(int argc, char *argv[])
 {
     int i, t; /* indice dei secondi che passano */
-    int atom_pid;
-    struct memory *memoriadim;
+ 
+    /// /struct memory *memoriadim;
 
     msqid = msgget((PID_SHM + 1), IPC_CREAT | IPC_EXCL | 0600); /* togli +4 */
 
@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
      * shm_stat[9] = int num_attivazioni_sec;
      *
      * shm_stat[10] = energia generata dagli atomi, disponibile quando il master preleva l'Energy Demand;
-     * // shm_stat[11] = int num_atom_tot, counter di tutti gli atomi effettivamente generati
+     * shm_stat[11] = int num_atom_tot, counter di tutti gli atomi effettivamente generati
      * shm_stat[12] = pid del master
      * shm_stat[13] = pid dell'attivatore
      * shm_stat[14] = pid dell'alimentazione
@@ -84,14 +84,15 @@ int main(int argc, char *argv[])
     // int
     stat_id = shmget(PID_SHM + 1, sizeof(int) * 15, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
     shm_stat = shmat(stat_id, NULL, 0);                                 /*collega l'area a un puntatore*/
-
-    atom_pid = shmget(PID_SHM + 15, sizeof(*memoriadim), 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
-    memoriadim = shmat(atom_pid, NULL, 0);                                   /*collega l'area a un puntatore*/
+   
+   //    atom_pid = shmget(PID_SHM + 15, sizeof(*memoriadim), 0600 | IPC_CREAT);
+    atom_pid = shmget(PID_SHM + 15, sizeof(int) * N_ATOMI_INIT, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
+    shm_atom = shmat(atom_pid, NULL, 0);                                   /*collega l'area a un puntatore*/
 
     shm_stat[12] = getpid();
-    printf("CAPPERINI %d \n", shm_stat[12]);
     shm_stat[11] = N_ATOMI_INIT;
-
+    printf("CAPPERINI %d \n", shm_stat[12]);
+    
     /**
      * SEMAFORI
      * parent pid + 0: fine configuarazione iniziale, la simulazione parte solo dopo che tutto e' stato inizializzato
@@ -109,9 +110,10 @@ int main(int argc, char *argv[])
 
     sem_writeShm = semget(PID_SHM + 2, 1, 0600 | IPC_CREAT);
     sem_setval(sem_writeShm, 0, 1);
-    printf(" Sem M 112 %i\n ", semctl(sem_writeShm, 0, GETVAL));
+    printf(" Sem M 112 write %i\n ", semctl(sem_writeShm, 0, GETVAL));
+    
     sem_att = semget(PID_SHM + 3, 1, 0600 | IPC_CREAT);
-    sem_setval(sem_att, 0, 0);
+    sem_setval(sem_att, 0, 1);
     printf("VALORE SEMAFORO SEM_ATT: %i \n ", semctl(sem_att, 0, GETVAL));
 
     /* array di stringhe, terminanti con NULL, da passare in execve() */
@@ -127,19 +129,13 @@ int main(int argc, char *argv[])
     /* Generazione degli ATOMI INIZIALI */
     for (i = 0; i < N_ATOMI_INIT; i++)
     {
-        printf("dopo 131 %i \n", semctl(sem_pid_atomi, 0, GETVAL));
+        printf("prima 131 sem pid atomi %i \n", semctl(sem_pid_atomi, 0, GETVAL));
 
-        // int h = getpid();
+
         /*CREAZIONE PIPE master atomo*/
         // char buffer[100];
-
         /*
        close(pipefd[0]);
-       //char c = h + '0';
-        char * mes= "cfgjhnghj\n";
-        printf("X master:%s \n", mes);
-
-
          //int buf = getpid();
        // int num_bytes;
          //chiudi lettura
@@ -176,7 +172,7 @@ int main(int argc, char *argv[])
             printf("buf: %d \n", readval);
             close(pipefd[0]); // chiuse lettura*/
 
-            memoriadim->pid[i] = getpid();
+            shm_atom[i] = getpid();
 
             printf("QUI3 \n");
             sprintf(argv_buffer, "%d", (getppid()));
@@ -185,20 +181,15 @@ int main(int argc, char *argv[])
 
             exit(0);
             break;
-        default: /*
-           printf("QUI60 \n");
-             close(pipefd[0]);
-             write(pipefd[1], &h, sizeof(int));
-               printf("h: %d \n\n", h);
-             close(pipefd[1]); // chiusa scrittura*/
+        default:
             break;
         }
         // close(pipefd[1]); // chiusa scrittura
 
-        while (semctl(sem_pid_atomi, 0, GETVAL) != (preAtt - 1))
-            ;
+        while (semctl(sem_pid_atomi, 0, GETVAL) != (preAtt - 1));
         preAtt = semctl(sem_pid_atomi, 0, GETVAL);
-        printf("dopo atomo  157 %i \n", semctl(sem_pid_atomi, 0, GETVAL));
+        printf("dopo atomo  191 %i \n", semctl(sem_pid_atomi, 0, GETVAL));
+        printf("dopo atomo PREATT 191 %i \n", preAtt);
     }
     printf("TUTTI GLI ATOMI SONO PRONTI\n");
 
@@ -222,8 +213,7 @@ int main(int argc, char *argv[])
         break;
     }
     printf("preAtt = %d \n", preAtt);
-    while (semctl(sem_pid_atomi, 0, GETVAL) != (preAtt - 1))
-        ;
+    while (semctl(sem_pid_atomi, 0, GETVAL) != (preAtt - 1));
     preAtt -= 1;
     printf("preAtt DOPO = %d \n", preAtt);
 
@@ -233,8 +223,7 @@ int main(int argc, char *argv[])
 
     printf("ALIMENTAZIONE \n");
     /* Generazione processo ALIMENTAZIONE */
-    switch (fork())
-    {
+    switch (fork()) {
     case -1:
         printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEL PROCESSO ALIMENTAZIONE\n");
         kill(getpid(), SIGABRT);
@@ -251,35 +240,34 @@ int main(int argc, char *argv[])
     while (semctl(sem_pid_atomi, 0, GETVAL) != (preAtt - 1));
     preAtt -= 1;
     printf("IL PROCESSO ALIMENTAZIONE E' PRONTO\n");
-    printf("SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
+    printf("SEMAFORO sem pid in master= %i \n", semctl(sem_pid_atomi, 0, GETVAL));
     printf("\n");
 
     //////////////
     /* Aspetto fin quando il semaforo non è a 0, ovvero non sono stati creati tutti gli atomi */
-    while (semctl(sem_pid_atomi, 0, GETVAL) != 0)
-        ;
+    while (semctl(sem_pid_atomi, 0, GETVAL) != 0);
 
     printf("\n");
 
     printf("INIZIO DELLA SIMULAZIONE\n");
 
     t = 0;
-    shm_stat[10] = 20;
-    while (t < SIM_DURATION)
-    { /*SE SERVE metto delle flags qui per interrompere la sim*/
-
+   // shm_stat[10] = 20;
+    while (t < SIM_DURATION){ /*SE SERVE metto delle flags qui per interrompere la sim*/
         req.tv_sec = 1;
         req.tv_nsec = 0;
         nanosleep(&req, NULL);
 
-        printf("%i \n ", semctl(sem_att, 0, GETVAL));
+        printf("sem att inizio ciclo master: %i \n ", semctl(sem_att, 0, GETVAL));
 
         /* Attendo che gli altri processi facciano le loro cose */
-        while (semctl(sem_att, 0, GETVAL) == 1)
-            ;
-        printf("M229: %i\n ", semctl(sem_att, 0, GETVAL)); //// PROBLEMA QUIIIII XK RIMANE 000000
+        while (semctl(sem_att, 0, GETVAL) == 1);
+        printf("sem att Mast272: %i\n ", semctl(sem_att, 0, GETVAL)); //// PROBLEMA QUIIIII XK RIMANE 000000
 
-        while (semctl(sem_writeShm, 0, GETVAL) != 1);
+
+        printf("sem write shm Mast274: %i\n ", semctl(sem_writeShm, 0, GETVAL));
+        
+        while(semctl(sem_writeShm, 0, GETVAL) == 0);
         sem_reserve(sem_writeShm, 0);
 
         /* PRELIEVO DELL'ENERGY DEMAND */
@@ -308,9 +296,10 @@ int main(int argc, char *argv[])
         shm_stat[5] = 0;
         shm_stat[7] = 0;
         shm_stat[9] = 0;
+        
         sem_release(sem_writeShm, 0);
 
-        sem_setval(sem_att, 0, 0);
+        sem_release(sem_att, 0);
     }
 
     printf("IL TEMPO DI SIMULATIONE IMPOSTATO E' TERMINATO\n");
@@ -318,8 +307,7 @@ int main(int argc, char *argv[])
     /* Fine sumulazione, invio un SIGABRT a tutti i processi indicandogli di terminare*/
     endSimulation();
 
-    while (wait(NULL) != -1)
-        ; /*???????????*/
+    while (wait(NULL) != -1); /*???????????*/
 
     printf("SIMULAZIONE TERMINATA CON SUCCESSO\n");
 
@@ -330,8 +318,7 @@ int main(int argc, char *argv[])
 }
 
 /* Controllo iniziale sui parametri inseriti nel file input */
-void check_in()
-{
+void check_in() {
     const char *file_path = "../src/input.txt";
     char buffer[1024];
     char *token;
@@ -442,8 +429,7 @@ void check_in()
 }
 
 /* Eseguo la print ogni secondo */
-void secPrint(int *shm_stat, int sec)
-{
+void secPrint(int *shm_stat, int sec) {
     printf("\033[0;33m");
     printf("AL SECONDO\t->\t[%d]\n", sec);
     printf("\033[0m");

@@ -1,4 +1,4 @@
- #include "utils.h"
+#include "utils.h"
 #include "../lib/ipc.c"
 
 //Cancella quelli non usati
@@ -42,19 +42,14 @@ int main(int argc, char * argv[]) {
 
 	/*int readval;
 	            printf("readval in atomo: %d \n", readval);
-
-	
  	char buffer[100];
 	int pipefd[2];
     pipe(pipefd); 
-	          // 
 			  int num_bytes;
     close(pipefd[1]);
      num_bytes = read(pipefd[0], buffer, sizeof(buffer));
-	
 		printf("buf: %s \n", buffer);
              close(pipefd[0]); //chiuse lettura
-			
 			//char * buf;
              //int buf = getpid();
 
@@ -65,9 +60,6 @@ int main(int argc, char * argv[]) {
              } //Prova ""
            //dprintf(pipefd[2], "%6d", getpid() );
             close(pipefd[1]); // chiusa scrittura
-
-
-
 	int pipefd[2]; // 0 read, 1 write
     pipe(pipefd);
 	int buf;
@@ -99,9 +91,9 @@ int main(int argc, char * argv[]) {
 
 
 
-	printf("IN ATOMO 54 - SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));	
+		
 	sem_reserve(sem_pid_atomi, 0);
-
+printf("IN ATOMO 94 dopo pid atomi - SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
 		printf("ATOMO CONTINUA \n");
 }
 
@@ -109,7 +101,7 @@ void scissione() {
 	int num_bytes = msgrcv(msqid, &my_msg, sizeof(my_msg), 1, 0); //ricevo il messaggio
 	
 	if(num_bytes < 0){
-		printf("Messaggio non arrivato, num_bytes = %d \n", num_bytes);
+		printf("Messaggio non arrivato in atomo, num_bytes = %d \n", num_bytes);
 		// return;
 	}
 	int num_atomico = my_msg.mnum_atomico;
@@ -181,6 +173,7 @@ void scissione() {
 			shm_stat[10] = shm_stat[10] + energy_created;
 			shm_stat[6] = shm_stat[6] + 1; /* aumento il contatore delle scissioni in shm */
 			shm_stat[7] = shm_stat[7] + 1;
+			shm_stat[11] = shm_stat[11] + 1; /*aumento atomi totali*/
 
 			sem_release(sem_writeShm, 0);
 			printf(" Sem atomo 116 %i\n ", semctl(sem_writeShm, 0, GETVAL));

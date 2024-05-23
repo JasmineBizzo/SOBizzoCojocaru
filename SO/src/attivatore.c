@@ -10,7 +10,7 @@ int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 	int * pid_atomo;
 	int * num_atomico;
 	//int max_index = SIZE-1; // massimo numero di elementi che si può mettere negli array
-	int ind = 0; // indice degli array
+	int ind; // indice degli array
 	int stat_id;
 	int *shm_stat;
 
@@ -40,6 +40,7 @@ void handle_signal(int signal) {
 			endLocal();
 		break;
 		case SIGUSR1: /*salva l'atomo nella tabella */
+			printf("ATTIVATORE RICEVE SEGNALE\n");
 			add_atom();
 		break;
 		case SIGUSR2:
@@ -68,25 +69,29 @@ int main(int argc, char argv[]) {
 	stat_id = shmget(PID_SHM + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
 	shm_stat = shmat(stat_id, NULL, 0);		// collegare l'area a un puntatore
 	
-
+	//	atom_pid = shmget(PID_SHM + 15, sizeof(*memoriadim), 0600 | IPC_CREAT);
 		/*QUI PID 15!!!!!*/
-	atom_pid = shmget(PID_SHM + 15, sizeof(*memoriadim), 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
+	atom_pid = shmget(PID_SHM + 15, sizeof(int) * N_ATOMI_INIT, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
 	shm_atom = shmat(atom_pid, NULL, 0); /*collega l'area a un puntatore*/
 
 	int t = 0; // secondi che passano 
 	srand(time(NULL));
+	ind = 0; 
 
 	pid_atomo = malloc(sizeof(int) * N_ATOMI_INIT);
 	num_atomico = malloc(sizeof(int) * N_ATOMI_INIT);
 
 	for (ind; ind < N_ATOMI_INIT; ind++) {
-		pid_atomo[ind] = memoriadim->pid[ind];
+		pid_atomo[ind] = shm_atom[ind];
 		num_atomico[ind] = rand()%(N_ATOM_MAX+1)+1;
 	}
+	/*Non useremo più questa shm, quindi la chiudiamo*/
+	shmdt(shm_atom);
+	shmctl(atom_pid, IPC_RMID, NULL);
 
 	sem_pid_atomi = semget(PID_SHM +1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(PID_SHM + 2, 1, 0600 | IPC_CREAT);
-	sem_att = semget(PID_SHM +3 , 1, 0600 | IPC_CREAT);
+	sem_att = semget(PID_SHM + 3 , 1, 0600 | IPC_CREAT);
 
 
 	
@@ -102,35 +107,33 @@ int main(int argc, char argv[]) {
 	int intervallo = STEP_ATTIVATORE;
 	printf("ECCOMI 3\n");
 	
-	printf("CIao \n");
 	// int prova = semctl(sem_att, 0, GETVAL);
 	//sem_setval(sem_att, 0, 0);
 	sem_reserve(sem_pid_atomi, 0);
 	printf("IN ATTIVATORE DOPO RESERVE - SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
+		
 	while(semctl(sem_pid_atomi, 0, GETVAL) != 0);
+	//while(semctl(sem_att, 0, GETVAL) != 0);
 
 	printf("ATTIVATORE CONTINUA. \n");
 
-	int fedeindio = semctl(sem_pid_atomi, 0, GETVAL);
-    printf("ATTIVATOREEEEEEE = %i \n", fedeindio);
-	//while(semctl(sem_attivatore_start, 0, GETVAL) != 1);
-/*NON VA UN CAZZO QUI*/
-	printf("\n");	    
-	while(fedeindio != 0); 
-	printf("ATTIVATORE = %i", fedeindio);
-//	if(fedeindio == 0) ){
-			printf("ECCOMI 33\n");
-	while (t <= SIM_DURATION){ //&& 
+
+    printf("ATTIVATOREEEEEEE = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
+	
+	
+	while(t <= SIM_DURATION){ //&& 
 			printf("ECCOMI 2\n");
-		if(t == intervallo){
-			choose_atom(); // SERVE DOPO - lo commento ora perchè l'array è ancora vuoto e quindi da errore
-			intervallo += STEP_ATTIVATORE;
-		}
+		while(semctl(sem_att, 0, GETVAL) == 0); //quano è 1 va avanti
+	
+			if(t == 0 || t == intervallo){
+				choose_atom();
+				intervallo += STEP_ATTIVATORE;
+			}
 
 		sem_release(sem_att, 0);
 		t++;
 	}
-//	}
+
 
 	//free(pid_atomo);
 	free(num_atomico);
@@ -150,11 +153,13 @@ void add_atom(){
 	num_bytes = msgrcv(msqid, &my_msg, sizeof(my_msg), 1, 0);
 
 	if(num_bytes < 0){
-		printf("Messaggio non arrivato, num_bytes = %d \n", num_bytes);
+		printf("Messaggio non arrivato ATTIVATORE, num_bytes = %d \n", num_bytes);
 		// return;
+	} else {
+		printf("Messaggio arrivato ATTIVATORE, num_bytes = %d \n", num_bytes);
 	}
 
-	printf("Messaggio arrivato, num_bytes = %d \n", num_bytes);
+	
 
 	switch (fork()){
         case -1:
@@ -196,36 +201,32 @@ int check_memory_size(){
 
 void choose_atom(){
 	while(semctl(sem_writeShm, 0, GETVAL) != 1);
-	printf("%i Attiv198\n ", semctl(sem_writeShm, 0, GETVAL));
+	printf("Attiv198 sem write : %i \n ", semctl(sem_writeShm, 0, GETVAL));
 	sem_reserve(sem_writeShm, 0);
+	printf("Attiv222 sem write dopo reserve: %i \n ", semctl(sem_writeShm, 0, GETVAL));
+	ind = shm_stat[11];
 
 	int n = rand()%ind+0;
-
+printf("QUA ATT 0\n");
 	num_atomico[n] /= 2; //lo divido già per due 
-	my_msg.mnum_atomico=num_atomico[n]; 
+						printf("\n PRIMA INVIO MESSAGGIO IN ATTIVATORE\n");
+	my_msg.mnum_atomico = num_atomico[n]; 
 	my_msg.mpid = pid_atomo[n];
+	printf("QUA ATT 1\n");
 	msgsnd(msqid, &my_msg, sizeof(my_msg), 0); // NUM_ATOMICO DELL'ATOMO DA SCINDERE
+	printf("QUA ATT 2\n");
+	printf("\n");
+
 	
 	shm_stat[8] = shm_stat[8] + 1; // aumento il contatore delle attivazioni in shm
 	shm_stat[9] = shm_stat[9] + 1;
 	
 	sem_release(sem_writeShm, 0);
+	
 	printf("%i Attiv212\n ", semctl(sem_writeShm, 0, GETVAL));
 	kill(my_msg.mpid, SIGUSR1); // SEGNALE AD ATOMO PER AVVIARE LA SCISSIONE
-	
-			
 }
-/*
-void print(){
-	for (int i = 0; i<ind; i++) {
-		printf("ID: %d \n", i);
-		printf("PID: %d \n", pid_atomo[i]);
-		printf("NUM_ATOMICO: %d \n", num_atomico[i]);
-		printf("INDEX: %d \n", ind);
-	//	printf("MAX_INDEX: %d \n", max_index);
-		printf("\n");
-	}
-}*/
+
 
 void found_waste() {
 	int num_bytes = msgrcv(msqid, &my_msg, sizeof(my_msg), 1, 0);
