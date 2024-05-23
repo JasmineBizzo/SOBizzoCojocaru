@@ -20,6 +20,7 @@
 #include <sys/msg.h>
 
 #define NUM_ATOMI_MAX 200
+#define PID_SHM 123456
 
 
 struct msgbuff {

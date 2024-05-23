@@ -19,6 +19,7 @@ struct msgbuff my_msg;
 //pid_t pidAttivatore, pidAliment; // process identificator dei process id
     // struct msgbuff; /* */
 
+
 void handle_signal(int signal) {
 	switch (signal){
 		case SIGABRT:
@@ -32,47 +33,81 @@ void handle_signal(int signal) {
 	}
 }
 
-int main(int argc, char * argv[]) {printf("QUI 4 \n");
-	
-	int pipefd[2]; // 0 read, 1 write
-    pipe(pipefd);
-
-    char buf[100];
-    int num_bytes;
-    close(pipefd[1]); // chiusa scrittura
-    num_bytes = read(pipefd[1], buf, sizeof(buf));
-	close(pipefd[0]); //chiuse lettura
-
-		/*FUNGE???*/
-	stat_id = shmget(atoi(buf) + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
-	shm_stat = shmat(stat_id, NULL, 0);									// collegare l'area a un puntatore
-	printf("QUI 6 \n");
-	// int pid_master = shm_stat[12];
-
-	msqid = msgget(shm_stat[12] + 1, IPC_CREAT | IPC_EXCL | 0600);
-
-    printf("QUI 5 \n");
-	srand(time(NULL));
-	
-	sem_pid_atomi = semget(shm_stat[12] + 1, 1, 0600 | IPC_CREAT);
-	sem_writeShm = semget(shm_stat[12] + 2, 1, 0600 | IPC_CREAT);
-
+int main(int argc, char * argv[]) {
 	struct sigaction sa;
 	bzero(&sa, sizeof(sa));		   // set all bytes to 0
 	sa.sa_handler = handle_signal; // puntatore alla funzione handler dei segnali
 	sigaction(SIGABRT, &sa, NULL); // set del signal handler
 	sigaction(SIGUSR1, &sa, NULL);
 
+	/*int readval;
+	            printf("readval in atomo: %d \n", readval);
+
+	
+ 	char buffer[100];
+	int pipefd[2];
+    pipe(pipefd); 
+	          // 
+			  int num_bytes;
+    close(pipefd[1]);
+     num_bytes = read(pipefd[0], buffer, sizeof(buffer));
+	
+		printf("buf: %s \n", buffer);
+             close(pipefd[0]); //chiuse lettura
+			
+			//char * buf;
+             //int buf = getpid();
+
+             //chiudi lettura
+    /* if(write(pipefd[1], &buf, sizeof(int)) == -1){
+                perror("Write error");
+                exit(-1);
+             } //Prova ""
+           //dprintf(pipefd[2], "%6d", getpid() );
+            close(pipefd[1]); // chiusa scrittura
+
+
+
+	int pipefd[2]; // 0 read, 1 write
+    pipe(pipefd);
+	int buf;
+	//char * buf;
+    //char buf[100];
+    //int num_bytes;
+    close(pipefd[1]); // chiusa scrittura
+    //num_bytes = 
+	read(pipefd[0], &buf, sizeof(int));
+	close(pipefd[0]); //chiuse lettura */
+	
+	//int pid_master = buf;*/
+
+
+		/*FUNGE???*/
+	stat_id = shmget(PID_SHM + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
+	shm_stat = shmat(stat_id, NULL, 0);									// collegare l'area a un puntatore
+	printf("QUI 5 \n");
+	//shm_stat[12] = atoi(buf);
+
+	msqid = msgget(PID_SHM + 1, IPC_CREAT | IPC_EXCL | 0600);
+	
+    printf("QUI 6 \n");
+	srand(time(NULL));
+	
+	sem_pid_atomi = semget(PID_SHM + 1, 1, 0600 | IPC_CREAT);
+	sem_writeShm = semget(PID_SHM + 2, 1, 0600 | IPC_CREAT);
+
+
+
 
 	printf("IN ATOMO 54 - SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));	
 	sem_reserve(sem_pid_atomi, 0);
 
-	printf("ATOMO CONTINUA \n");
+		printf("ATOMO CONTINUA \n");
 }
 
 void scissione() {
 	int num_bytes = msgrcv(msqid, &my_msg, sizeof(my_msg), 1, 0); //ricevo il messaggio
-
+	
 	if(num_bytes < 0){
 		printf("Messaggio non arrivato, num_bytes = %d \n", num_bytes);
 		// return;
@@ -89,7 +124,7 @@ void scissione() {
 		exit(0); //termina il processo chiamante
 	} 
 		
-	/*PIPE atomo genitore atomo figlio*/
+	/*PIPE atomo genitore atomo figlio
 	int pipefd[2];
     pipe(pipefd);
 
@@ -98,7 +133,7 @@ void scissione() {
     close(pipefd[0]); //chiudi lettura
     //num_bytes2 = 
 	write(pipefd[1], shm_stat[12], sizeof(buf));
-	close(pipefd[1]); // chiusa scrittura
+	close(pipefd[1]); // chiusa scrittura */
 
 	
 	if (fork() == -1) { // se fork fallisce -> termina simulazione

@@ -31,7 +31,7 @@ int main(int argc, char * argv[]) {
 	
 	int msqid;
 	int intervallo = STEP_ALIMENTAZIONE;
-	msqid = msgget(getppid() +1, IPC_CREAT | IPC_EXCL | 0600);
+	msqid = msgget(PID_SHM + 1, IPC_CREAT | IPC_EXCL | 0600);
 	struct timespec req;
 	srand(time(NULL)); //senza a ogni esecuzione del programma viene sempre estratto lo stesso numero
 
@@ -40,7 +40,7 @@ int main(int argc, char * argv[]) {
 	sa.sa_handler = handle_signal; // puntatore alla funzione handler dei segnali
 	sigaction(SIGABRT, &sa, NULL); // set del signal handler
 
-	stat_id = shmget(getppid() + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
+	stat_id = shmget(PID_SHM + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
 	shm_stat = shmat(stat_id, NULL, 0);									// collegare l'area a un puntatore
 
 	char ato[] = {"../src/atomo"}; 
@@ -49,16 +49,16 @@ int main(int argc, char * argv[]) {
 
 	// SEMAFORO O SEGNALE che parte ogni STEP ALIMENTAZIONE nano secondi!!
 
-	sem_pid_atomi = semget(getppid() +1, 1, 0600 | IPC_CREAT);
-	sem_writeShm = semget(getppid() + 2, 1, 0600 | IPC_CREAT);
+	sem_pid_atomi = semget(PID_SHM + 1, 1, 0600 | IPC_CREAT);
+	sem_writeShm = semget(PID_SHM + 2, 1, 0600 | IPC_CREAT);
 
 	int t = 0;
 	
 	printf("IN ALIMENTAZIONE - SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
-	//sem_reserve(sem_pid_atomi, 0);
+	sem_reserve(sem_pid_atomi, 0);
 	printf("IN ALIMENTAZIONE DOPO RESERVE - SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
 	
-	//while(semctl(sem_pid_atomi, 0, GETVAL) != 0);
+	while(semctl(sem_pid_atomi, 0, GETVAL) != 0);
 
 	printf("ALIMENTATORE CONTINUA. \n");
 	//SIM_DURATION =5;

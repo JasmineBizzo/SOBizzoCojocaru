@@ -65,12 +65,12 @@ int main(int argc, char argv[]) {
 	sigaction(SIGUSR1, &sa, NULL);
 	sigaction(SIGUSR2, &sa, NULL);
 
-	stat_id = shmget(getppid() + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
+	stat_id = shmget(PID_SHM + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
 	shm_stat = shmat(stat_id, NULL, 0);		// collegare l'area a un puntatore
 	
 
 		/*QUI PID 15!!!!!*/
-	atom_pid = shmget(shm_stat[12] + 15, sizeof(*memoriadim), 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
+	atom_pid = shmget(PID_SHM + 15, sizeof(*memoriadim), 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
 	shm_atom = shmat(atom_pid, NULL, 0); /*collega l'area a un puntatore*/
 
 	int t = 0; // secondi che passano 
@@ -84,15 +84,15 @@ int main(int argc, char argv[]) {
 		num_atomico[ind] = rand()%(N_ATOM_MAX+1)+1;
 	}
 
-	sem_pid_atomi = semget(shm_stat[12] +1, 1, 0600 | IPC_CREAT);
-	sem_writeShm = semget(shm_stat[12] + 2, 1, 0600 | IPC_CREAT);
-	sem_att = semget(shm_stat[12] +3 , 1, 0600 | IPC_CREAT);
+	sem_pid_atomi = semget(PID_SHM +1, 1, 0600 | IPC_CREAT);
+	sem_writeShm = semget(PID_SHM + 2, 1, 0600 | IPC_CREAT);
+	sem_att = semget(PID_SHM +3 , 1, 0600 | IPC_CREAT);
 
 
 	
 	printf("ECCOMI\n");
 	// creazione / individuazione coda di messaggi
-	msqid = msgget((getppid()+1), IPC_CREAT | IPC_EXCL | 0600);
+	msqid = msgget(PID_SHM + 1, IPC_CREAT | IPC_EXCL | 0600);
 	
 	struct timespec req;
 	printf("ECCOMI 2\n");
