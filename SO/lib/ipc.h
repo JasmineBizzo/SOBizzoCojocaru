@@ -12,14 +12,11 @@ union semun {
 	struct seminfo  *__buf;  /* Buffer for IPC_INFO (Linux-specific) */
 };
 
-int sem_set_val(int sem_id, int sem_num, int sem_val);
+int sem_setval(int sem_id, int sem_num, int sem_val);
 
 int sem_reserve(int sem_id, int sem_num);
 
 int sem_release(int sem_id, int sem_num);
-
-/*Fine Sez Semafori*/
-
 
 
 #endif
