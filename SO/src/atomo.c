@@ -13,8 +13,9 @@ struct msgbuff my_msg; //, my_msg_createAtom;
 //pid_t pidAttivatore, pidAliment; // process identificator dei process id
     // struct msgbuff; /* */
 
-void endLocal();
+void read_in();
 void scissione();
+void endLocal();
 
 void handle_signal(int signal) {
 	switch (signal){
@@ -28,6 +29,58 @@ void handle_signal(int signal) {
 		default:
 		break;
 	}
+}
+
+void read_in(){
+const char *file_path = "../src/input.txt";
+    char buffer[1024];
+    char *token;
+    FILE *file_descriptor = fopen(file_path, "r");
+
+    if (!file_descriptor) {
+        perror("Failed to open the file");
+    }
+    while (fgets(buffer, 1024, file_descriptor)) {
+        token = strtok(buffer, " ");
+
+        if (strcmp(token, "ENERGY_DEMAND") == 0){
+            token = strtok(NULL, " ");
+            ENERGY_DEMAND = atoi(token);
+        }
+        else if (strcmp(token, "N_ATOMI_INIT") == 0){
+            token = strtok(NULL, " ");
+            N_ATOMI_INIT = atoi(token);
+        }
+        else if (strcmp(token, "N_ATOM_MAX") == 0){
+            token = strtok(NULL, " ");
+            N_ATOM_MAX = atoi(token);
+        }
+        else if (strcmp(token, "MIN_N_ATOMICO") == 0){
+            token = strtok(NULL, " ");
+            MIN_N_ATOMICO = atoi(token);
+        }
+        else if (strcmp(token, "STEP_ATTIVATORE") == 0){
+            token = strtok(NULL, " ");
+            STEP_ATTIVATORE = atoi(token);
+        }
+        else if (strcmp(token, "STEP_ALIMENTAZIONE") == 0){
+            token = strtok(NULL, " ");
+            STEP_ALIMENTAZIONE = atoi(token);
+        }
+        else if (strcmp(token, "N_NUOVI_ATOMI") == 0){
+            token = strtok(NULL, " ");
+            N_NUOVI_ATOMI = atoi(token);
+        }
+        else if (strcmp(token, "SIM_DURATION") == 0){
+            token = strtok(NULL, " ");
+            SIM_DURATION = atoi(token);
+        }
+        else if (strcmp(token, "ENERGY_EXPLODE_THRESHOLD") == 0){
+            token = strtok(NULL, " ");
+            ENERGY_EXPLODE_THRESHOLD = atoi(token);
+        }
+    }
+    fclose(file_descriptor);
 }
 
 void scissione() {
@@ -162,6 +215,8 @@ int main(int argc, char * argv[]) {
 	sigaction(SIGABRT, &sa, NULL); // set del signal handler
 	sigaction(SIGUSR1, &sa, NULL);
 
+	void read_in();
+
 	stat_id = shmget(pid_master + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
 	shm_stat = shmat(stat_id, NULL, 0);			// collegare l'area a un puntatore
  
@@ -176,6 +231,8 @@ int main(int argc, char * argv[]) {
 	// IPC_EXCL | 
 	msqid = msgget(pid_master + 1, IPC_CREAT | 0600);
 	//msqid_createAtom = msgget(pid_master + 2, IPC_CREAT | 0600); // coda per salvare gli atomi
+
+
 
 	printf("DEVO ESSERE SALVATO, QUINDI INVIO MESSAGGIO AD ATTIVATORE \n");
 	my_msg.mtype = 1;

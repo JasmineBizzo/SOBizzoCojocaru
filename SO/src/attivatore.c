@@ -14,6 +14,7 @@ int sem_pid_atomi, sem_writeShm, sem_att, sem_saveatom;
 //pid_t pidAttivatore, pidAliment; 
 struct msgbuff my_msg; //my_msg_createAtom, 
 
+void read_in();
 void add_atom();// aggiunge atomi quando riceve SIGUSR1
 //void add_atom_alim(); 
 int check_memory_size(); // controlla se ho spazio per salvare l'atomo
@@ -42,10 +43,61 @@ void handle_signal(int signal) {
 	}
 }
 
+void read_in(){
+	const char *file_path = "../src/input.txt";
+    char buffer[1024];
+    char *token;
+    FILE *file_descriptor = fopen(file_path, "r");
+
+    if (!file_descriptor) {
+        perror("Failed to open the file");
+    }
+    while (fgets(buffer, 1024, file_descriptor)) {
+        token = strtok(buffer, " ");
+
+        if (strcmp(token, "ENERGY_DEMAND") == 0){
+            token = strtok(NULL, " ");
+            ENERGY_DEMAND = atoi(token);
+        }
+        else if (strcmp(token, "N_ATOMI_INIT") == 0){
+            token = strtok(NULL, " ");
+            N_ATOMI_INIT = atoi(token);
+        }
+        else if (strcmp(token, "N_ATOM_MAX") == 0){
+            token = strtok(NULL, " ");
+            N_ATOM_MAX = atoi(token);
+        }
+        else if (strcmp(token, "MIN_N_ATOMICO") == 0){
+            token = strtok(NULL, " ");
+            MIN_N_ATOMICO = atoi(token);
+        }
+        else if (strcmp(token, "STEP_ATTIVATORE") == 0){
+            token = strtok(NULL, " ");
+            STEP_ATTIVATORE = atoi(token);
+        }
+        else if (strcmp(token, "STEP_ALIMENTAZIONE") == 0){
+            token = strtok(NULL, " ");
+            STEP_ALIMENTAZIONE = atoi(token);
+        }
+        else if (strcmp(token, "N_NUOVI_ATOMI") == 0){
+            token = strtok(NULL, " ");
+            N_NUOVI_ATOMI = atoi(token);
+        }
+        else if (strcmp(token, "SIM_DURATION") == 0){
+            token = strtok(NULL, " ");
+            SIM_DURATION = atoi(token);
+        }
+        else if (strcmp(token, "ENERGY_EXPLODE_THRESHOLD") == 0){
+            token = strtok(NULL, " ");
+            ENERGY_EXPLODE_THRESHOLD = atoi(token);
+        }
+    }
+    fclose(file_descriptor);
+}
+
 void add_atom() {
 	printf("SONO IN ADD ATOMO \n");
 	//ind = shm_stat[11];
-
 	int num_bytes =-1;
 	if(!check_memory_size()){
 		perror("Insufficient memory \n");
@@ -58,12 +110,14 @@ void add_atom() {
 		//return;
 	} else {
 		printf("Messaggio arrivato ATTIVATORE - ADDATOMO, num_bytes = %d \n", num_bytes);
-		printf("CONTENUTO DELLA CODA att: %d, %d \n", my_msg.mpid, my_msg.mnum_atomico);
-	}
+		//printf("CONTENUTO DELLA CODA att: %d, %d \n", my_msg.mpid, my_msg.mnum_atomico);
+		printf("QUI 115 N ATOM MAX = %d \n", N_ATOM_MAX);
+		}
 
-	printf("Riga 64 atomo");
+	printf("Riga 117 attivatore\n");
 	pid_atomo[ind] = my_msg.mpid;// getpid(); 
 
+	printf("Riga 120 attivatore\n");
 	if (my_msg.mnum_atomico == 0) {
 		num_atomico[ind]=rand()%N_ATOM_MAX+1;
 	} else {
@@ -194,6 +248,9 @@ int main(int argc, char argv[]) {
 	sigaction(SIGUSR1, &sa, NULL);
 	sigaction(SIGUSR2, &sa, NULL);
 
+	void read_in();
+	printf("QUI 253 N ATOM MAX = %d \n", N_ATOM_MAX);
+
 	stat_id = shmget(getppid() + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
 	shm_stat = shmat(stat_id, NULL, 0);		// collegare l'area a un puntatore
 
@@ -258,7 +315,7 @@ int main(int argc, char argv[]) {
 		//sem_reserve(sem_att, 0); /*master può iniziare la stampa*/ 
 		}
 	}
-	//free(pid_atomo);
+	free(pid_atomo);
 	free(num_atomico);
 	//msgctl(msqid, IPC_RMID, NULL);
 

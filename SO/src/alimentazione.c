@@ -1,20 +1,21 @@
- #include "utils.h"
+#include "utils.h"
 #include "../lib/ipc.c"
 
 int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-//void endSimulation();
-void endLocal();
-void choose_atom();
-
-//Mi serve dichiararle globali, perchè verranno usate sia dal main sia dall'handler e endSimulation
 int stat_id, atom_pid_id, atom_num_id;
 int *shm_stat, *shm_atom_pid, *shm_atom_num;
 int sem_pid_atomi, sem_writeShm;
 //pid_t pidAttivatore, pidAliment; 
-struct msgbuff my_msg; 
+struct msgbuff my_msg_alim; 
+int msqid_alim;
+
+void read_in();
+void endLocal();
+//void choose_atom();
+
 
 void handle_signal(int signal) {
 	switch (signal){
@@ -26,31 +27,89 @@ void handle_signal(int signal) {
 	}
 }
 
+void read_in(){
+const char *file_path = "../src/input.txt";
+    char buffer[1024];
+    char *token;
+    FILE *file_descriptor = fopen(file_path, "r");
+
+    if (!file_descriptor) {
+        perror("Failed to open the file");
+    }
+    while (fgets(buffer, 1024, file_descriptor)) {
+        token = strtok(buffer, " ");
+
+        if (strcmp(token, "ENERGY_DEMAND") == 0){
+            token = strtok(NULL, " ");
+            ENERGY_DEMAND = atoi(token);
+        }
+        else if (strcmp(token, "N_ATOMI_INIT") == 0){
+            token = strtok(NULL, " ");
+            N_ATOMI_INIT = atoi(token);
+        }
+        else if (strcmp(token, "N_ATOM_MAX") == 0){
+            token = strtok(NULL, " ");
+            N_ATOM_MAX = atoi(token);
+        }
+        else if (strcmp(token, "MIN_N_ATOMICO") == 0){
+            token = strtok(NULL, " ");
+            MIN_N_ATOMICO = atoi(token);
+        }
+        else if (strcmp(token, "STEP_ATTIVATORE") == 0){
+            token = strtok(NULL, " ");
+            STEP_ATTIVATORE = atoi(token);
+        }
+        else if (strcmp(token, "STEP_ALIMENTAZIONE") == 0){
+            token = strtok(NULL, " ");
+            STEP_ALIMENTAZIONE = atoi(token);
+        }
+        else if (strcmp(token, "N_NUOVI_ATOMI") == 0){
+            token = strtok(NULL, " ");
+            N_NUOVI_ATOMI = atoi(token);
+        }
+        else if (strcmp(token, "SIM_DURATION") == 0){
+            token = strtok(NULL, " ");
+            SIM_DURATION = atoi(token);
+        }
+        else if (strcmp(token, "ENERGY_EXPLODE_THRESHOLD") == 0){
+            token = strtok(NULL, " ");
+            ENERGY_EXPLODE_THRESHOLD = atoi(token);
+        }
+    }
+    fclose(file_descriptor);
+}
 
 int main(int argc, char * argv[]) {
 	srand(time(NULL)); //senza a ogni esecuzione del programma viene sempre estratto lo stesso numero
-
-	int msqid;
+	
 	//int intervallo = STEP_ALIMENTAZIONE;
-	msqid = msgget(PID_SHM + 1, IPC_CREAT | IPC_EXCL | 0600);
+
 	struct timespec req;
 	
 	struct sigaction sa;
 	bzero(&sa, sizeof(sa));		   // set all bytes to 0
 	sa.sa_handler = handle_signal; // puntatore alla funzione handler dei segnali
 	sigaction(SIGABRT, &sa, NULL); // set del signal handler
-
-	stat_id = shmget(PID_SHM + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
-	shm_stat = shmat(stat_id, NULL, 0);									// collegare l'area a un puntatore
-
+	
 	char ato[] = {"../src/atomo"}; 
 	char * args_atomi[]  = {"atomo.c", NULL}; 
 	char argv_buffer[50];
+	sprintf(argv_buffer, "%d", (getppid())); // passiamo il pid del master 
+	args_atomi[1] = argv_buffer;
+
+	void read_in();
+	
+	stat_id = shmget(getppid() + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
+	shm_stat = shmat(stat_id, NULL, 0);									// collegare l'area a un puntatore
 
 	// SEMAFORO O SEGNALE che parte ogni STEP ALIMENTAZIONE nano secondi!!
 
-	sem_pid_atomi = semget(PID_SHM + 1, 1, 0600 | IPC_CREAT);
-	sem_writeShm = semget(PID_SHM + 2, 1, 0600 | IPC_CREAT);
+	sem_pid_atomi = semget(getppid() + 1, 1, 0600 | IPC_CREAT);
+	sem_writeShm = semget(getppid() + 2, 1, 0600 | IPC_CREAT);
+
+	msqid_alim = msgget(getppid() + 2, IPC_CREAT | IPC_EXCL | 0600);
+
+
 
 	int t = 0;
 	
@@ -63,7 +122,8 @@ int main(int argc, char * argv[]) {
 	printf("ALIMENTATORE CONTINUA. \n");
 	//SIM_DURATION =5;
 //	N_NUOVI_ATOMI = 2;
-	while(1){	//(semctl(sem_pid_atomi, 0, GETVAL) == 0 && t <= SIM_DURATION
+	printf("FERMO WHILE \n"); // altrimenti mi va in loop e non vedo altro - 3000 è troppo poco 
+	while(1==0){	//(semctl(sem_pid_atomi, 0, GETVAL) == 0 && t <= SIM_DURATION
 		req.tv_sec = 0;
         req.tv_nsec = 3000; //STEP_ALIMENTAZIONE;
         nanosleep(&req, NULL);
@@ -99,19 +159,7 @@ int main(int argc, char * argv[]) {
         				printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI IN ALIMENTAZIONE\n");
             			kill(getpid(), SIGABRT);
         			case 0:
-					printf("\n PRIMA INVIO MESSAGGIO IN ALIMENTAZIONE\n");
 					
-						my_msg.mpid = getpid(); 
-            			my_msg.mnum_atomico = rand()%((N_ATOM_MAX+1)+1);
-						
-						printf("\n DOPO SEGNALE IL PROCESSO CONTINUA 0 \n");
-        				msgsnd(msqid, &my_msg, sizeof(my_msg), 0);
-
-						msgrcv(msqid, &my_msg, sizeof(my_msg), 1, 0);
-    	    			kill(shm_stat[13], SIGUSR1);
-              //  kill(101010, SIGUSR1);
-						printf("CONTENUTO DELLA CODA: %d, %d", my_msg.mpid, my_msg.mnum_atomico);
-						printf("\n DOPO SEGNALE IL PROCESSO CONTINUA 1 \n");
 
             			execve(ato, args_atomi, NULL); 
             			exit(0);
