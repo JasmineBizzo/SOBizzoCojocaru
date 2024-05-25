@@ -97,7 +97,7 @@ int main(int argc, char * argv[]) {
 	sprintf(argv_buffer, "%d", (getppid())); // passiamo il pid del master 
 	args_atomi[1] = argv_buffer;
 
-	void read_in();
+	read_in();
 	
 	stat_id = shmget(getppid() + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
 	shm_stat = shmat(stat_id, NULL, 0);									// collegare l'area a un puntatore
@@ -114,16 +114,16 @@ int main(int argc, char * argv[]) {
 	int t = 0;
 	
 	printf("IN ALIMENTAZIONE - SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
-	sem_reserve(sem_pid_atomi, 0);
+	sem_release(sem_pid_atomi, 0);
 	printf("IN ALIMENTAZIONE DOPO RESERVE - SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
 	
-	while(semctl(sem_pid_atomi, 0, GETVAL) != 0);
+	while(semctl(sem_pid_atomi, 0, GETVAL) != (N_ATOMI_INIT + 2));
 
 	printf("ALIMENTATORE CONTINUA. \n");
 	//SIM_DURATION =5;
 //	N_NUOVI_ATOMI = 2;
 	printf("FERMO WHILE \n"); // altrimenti mi va in loop e non vedo altro - 3000 è troppo poco 
-	while(1==0){	//(semctl(sem_pid_atomi, 0, GETVAL) == 0 && t <= SIM_DURATION
+	while(1==0){	//(semctl(sem_pid_atomi, 0, GETVAL) == (N_ATOMI_INIT + 2) && t <= SIM_DURATION
 		req.tv_sec = 0;
         req.tv_nsec = 3000; //STEP_ALIMENTAZIONE;
         nanosleep(&req, NULL);
@@ -142,18 +142,7 @@ int main(int argc, char * argv[]) {
 			//int i = shm_stat[11]; //i parte dal numero di atomi creati fino a quel momento
 			//int new = shm_stat[11] + N_NUOVI_ATOMI; //ed arriva a questo
     		for(i = 0; i < N_NUOVI_ATOMI; i++) {
-				/*PIPE alimentazione atomo atomo
-				int pipefd[2];
-    			pipe(pipefd);
-
-    			//char buf[100];
-				int n = 1010;//getppid();
-    			int num_bytes;
- 				close(pipefd[0]); //chiudi lettura
-    			num_bytes = write(pipefd[1], &n, sizeof(n)); //getppid()
-				close(pipefd[1]); // chiusa scrittura */
-	
-	
+			
 				switch (fork()) {
     				case -1:
         				printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI IN ALIMENTAZIONE\n");

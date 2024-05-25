@@ -12,6 +12,7 @@ int sem_pid_atomi, sem_writeShm, sem_att, sem_saveatom;
 struct msgbuff my_msg; //, my_msg_createAtom;
 //pid_t pidAttivatore, pidAliment; // process identificator dei process id
     // struct msgbuff; /* */
+int end_flag = 0; /*diventa 1 solo quando il processo può terminare*/
 
 void read_in();
 void scissione();
@@ -20,10 +21,11 @@ void endLocal();
 void handle_signal(int signal) {
 	switch (signal){
 		case SIGABRT:
+			end_flag = 1;
 			endLocal();
 		break;
 		case SIGUSR1:
-		printf("\n ATOMO RICEVE SEGNALI SCISSIONE \n");
+			printf("\n ATOMO RICEVE SEGNALE SCISSIONE \n");
 			scissione();
 		break;
 		default:
@@ -85,7 +87,6 @@ const char *file_path = "../src/input.txt";
 
 void scissione() {
 	int num_bytes = msgrcv(msqid, &my_msg, sizeof(my_msg), 0, 0); //ricevo il messaggio
-	int num_atomico_child;
 
 	if(num_bytes < 0){
 		printf("Messaggio non arrivato in ATOMO - SCISSIONE  num_bytes = %d \n", num_bytes);
@@ -93,10 +94,14 @@ void scissione() {
 	} else {
 		printf("Messaggio arrivato in ATOMO - SCISSIONE \n");
 	}
-	int num_atomico = my_msg.mnum_atomico;
-	int pid_atomo = my_msg.mpid;
 
-	//Per prima cosa controllo che non si crei una SCORIA
+	/*Gli viene passato il num atomico dell'atomo che nasce dalla scissione, 
+	già diviso. Lui lo ripasserà ad attivatore che lo aggiungerà al suo 
+	array locale con add_atom()*/
+	int num_atomico_child = my_msg.mnum_atomico;
+
+	/*ORA IN ATTIVATORE
+	//Per prima cosa controllo che non si crei una 
 	if (num_atomico <= MIN_N_ATOMICO) {
 		printf("IN ATOMO - TROVATA SCORIA \n");
 		my_msg.mtype=1;
@@ -104,71 +109,41 @@ void scissione() {
 		my_msg.mnum_atomico = num_atomico;
 		msgsnd(msqid, &my_msg, sizeof(my_msg), 0);
 		kill(shm_stat[13], SIGUSR2);
-		// exit(0); //termina il processo chiamante
-	} 
-		
-	/*PIPE atomo genitore atomo figlio
-	int pipefd[2];
-    pipe(pipefd);
+		//exit(0); //termina il processo chiamante
+	} */
 
-    char buf[100];
-    // int num_bytes2;
-    close(pipefd[0]); //chiudi lettura
-    //num_bytes2 = 
-	write(pipefd[1], shm_stat[12], sizeof(buf));
-	close(pipefd[1]); // chiusa scrittura */
-
-	if (num_atomico % 2 == 0) { //se il num atomico del padre è pari
-			num_atomico /= 2; //dimezzo il num atomico del padre
-			num_atomico_child = num_atomico; //salvo num atomico del filgio quello del figlio
-					
-	} else { //se il num atomico del padre è dispari
-			num_atomico /= 2; //dimezzo il num atomico del padre
-			num_atomico_child = num_atomico + 1; //salvo quello del figlio (che sarà maggiore di 1)
-	}
-
-
-	if (fork() == -1) { // se fork fallisce -> termina simulazione
+	if (fork() == -1) {
 		printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI INIZIALI\n");
-        kill(shm_stat[12], SIGABRT); /* INVIO UN SEGNALE AL MASTER E l'App termina*/
+        kill(shm_stat[12], SIGABRT); /* INVIO UN SEGNALE AL MASTER E termin0 simulazione*/
 	} else if (fork() == 0) {
-		// my_msg.mpid = getpid(); //scrivo nella queue il pid del figlio appena creato
-		
+		sem_reserve(sem_saveatom, 0); //atomo quando inizia a crearsi mette saveatom a 0
 
- 		char * args_atomi[]  = {"atomo.c", NULL}; 
-    	char argv_buffer[50];      /*!!!!!!!!*/
+		printf("DEVO ESSERE SALVATO, QUINDI INVIO MESSAGGIO AD ATTIVATORE \n");
+		my_msg.mtype = 1;
+		my_msg.mpid = getpid();
+		my_msg.mnum_atomico = num_atomico_child; /*Qui metto quello del figlio della scissione*/
+		
+		printf("CONTENUTO DELLA CODA: %d, %d \n", my_msg.mpid, my_msg.mnum_atomico);
+		msgsnd(msqid, &my_msg, sizeof(my_msg), 0);
+		kill(shm_stat[13], SIGUSR1); // SEGNALE AD ATTIVATORE per save atomo figlio
+
+   		char argv_buffer[50];
+ 		char * args_atomi[]  = {"atomo.c", NULL};
     	char ato[] = {"../src/atomo"}; 
 
 		sprintf(argv_buffer, "%d", pid_master);
     	args_atomi[1] = argv_buffer;
-		
-		my_msg.mnum_atomico = num_atomico;
+		printf("ATOMO 135 VEDIAMO ARGS_ATOMI 1: %d \n", atoi(args_atomi[1]));
 
 		// int pid_master = (atoi) argv[1];
- 	// sprintf(argv_buffer, "%d", (getppid()));
-   // 	args_atomi[1] = argv_buffer;
+ 		// sprintf(argv_buffer, "%d", (getppid()));
+   		// 	args_atomi[1] = argv_buffer;
 		execve(ato, args_atomi, NULL);
      	exit(0);
 	} 
-	
-		/**Assegnazione del num atomico al figlio
-		 * Se num atom del padre = 20
-		 * nuovo num atom padre -> 10 e num atom filgio ->10
-		 * 
-		 * Se num atom del padre = 21
-		 * nuovo num atom padre -> 10 e num atom figlio -> 11
-		*/	
-		/*
-		if (num_atomico % 2 == 0) { //se il num atomico del padre è pari
-			num_atomico /= 2; //dimezzo il num atomico del padre
-			my_msg.mnum_atomico = num_atomico; //salvo num atomico del filgio quello del figlio
-					
-		} else { //se il num atomico del padre è dispari
-			num_atomico /= 2; //dimezzo il num atomico del padre
-			my_msg.mnum_atomico = num_atomico + 1; //salvo quello del figlio (che sarà maggiore di 1)
-		}
-		*/
+		
 
+/*ANCHE QUESTO ORA È IN ATTIVATORE
         while(semctl(sem_writeShm, 0, GETVAL) != 1);
 		sem_reserve(sem_writeShm, 0);
 		printf(" Sem atomo 104 %i\n ", semctl(sem_writeShm, 0, GETVAL));
@@ -176,15 +151,16 @@ void scissione() {
 			//Incremento il counter dell'energia liberata ad ogni scissione
 			//Posso sottrarre sempre il num atom del figlio perchè o sono uguali o questo è maggiore
 			int energy_created = (num_atomico * my_msg.mnum_atomico) - my_msg.mnum_atomico;
-			shm_stat[0] = shm_stat[0] + energy_created; /* aumento il contatore dell'energia in shm */
+			shm_stat[0] = shm_stat[0] + energy_created; /* aumento il contatore dell'energia in shm 
 			shm_stat[1] = shm_stat[1] + energy_created;
 			shm_stat[10] = shm_stat[10] + energy_created;
-			shm_stat[6] = shm_stat[6] + 1; /* aumento il contatore delle scissioni in shm */
+			shm_stat[6] = shm_stat[6] + 1; /* aumento il contatore delle scissioni in shm 
 			shm_stat[7] = shm_stat[7] + 1;
-			shm_stat[11] = shm_stat[11] + 1; /*aumento atomi totali*/
+			//shm_stat[11] = shm_stat[11] + 1; /*SERVE???? aumento atomi totali
 
 			sem_release(sem_writeShm, 0);
-			printf(" Sem atomo 116 %i\n ", semctl(sem_writeShm, 0, GETVAL));
+			printf(" Sem atomo 116 %i\n ", semctl(sem_writeShm, 0, GETVAL)); */
+
 
 			//sem_reserve(sem_att, 0); /*master può iniziare la stampa*/ 
 			// my_msg.mtype=1;
@@ -209,13 +185,14 @@ int main(int argc, char * argv[]) {
 	printf("PID DELL'ATOMO CREATO: %d \n", getpid());
 	// printf("NUM_ATOMICO DA ARGV: %d \n", num_atomico);
 	srand(time(NULL));
+
 	struct sigaction sa;
 	bzero(&sa, sizeof(sa));		   // set all bytes to 0
 	sa.sa_handler = handle_signal; // puntatore alla funzione handler dei segnali
 	sigaction(SIGABRT, &sa, NULL); // set del signal handler
 	sigaction(SIGUSR1, &sa, NULL);
 
-	void read_in();
+	read_in();
 
 	stat_id = shmget(pid_master + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
 	shm_stat = shmat(stat_id, NULL, 0);			// collegare l'area a un puntatore
@@ -232,7 +209,8 @@ int main(int argc, char * argv[]) {
 	msqid = msgget(pid_master + 1, IPC_CREAT | 0600);
 	//msqid_createAtom = msgget(pid_master + 2, IPC_CREAT | 0600); // coda per salvare gli atomi
 
-
+	/*	QUESTO LO SPOSTO NEL MASTER e IN METODO SCISSIONE
+	sem_reserve(sem_saveatom, 0); //atomo quando inizia a crearsi mette saveatom a 0
 
 	printf("DEVO ESSERE SALVATO, QUINDI INVIO MESSAGGIO AD ATTIVATORE \n");
 	my_msg.mtype = 1;
@@ -240,14 +218,15 @@ int main(int argc, char * argv[]) {
 
 	printf("CONTENUTO DELLA CODA: %d, %d \n", my_msg.mpid, my_msg.mnum_atomico);
 	msgsnd(msqid, &my_msg, sizeof(my_msg), 0);
-	kill(shm_stat[13], SIGUSR1); // SEGNALE AD ATTIVATORE per creazione atomo
-    
+	kill(shm_stat[13], SIGUSR1); // SEGNALE AD ATTIVATORE per creazione atomo*/
+
 	while(semctl(sem_saveatom, 0, GETVAL) == 0); // aspetto che attivatore mi salvi 
 
 	printf("\nDOPO SEGNALE IL PROCESSO ATOMO CONTINUA\n");	
-
-
-	sem_reserve(sem_pid_atomi, 0);
-	printf("IN ATOMO 194 dopo pid atomi - SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
+	
+	sem_release(sem_pid_atomi, 0);/* ANCHE GLI ATOMI CREATI DURANTE LA SIMULAZIONE LO AUMENTANO, MODO PER RISOLVERE? :( */
+	printf("IN ATOMO 230 dopo pid atomi - SEM pid atomi = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
 	printf("ATOMO CONTINUA \n");
+	while(!end_flag); /*Esce dal loop per chiamare signal handler quando riceve un segnale da attivatore*/
+	/*GUARDA BENE SE FUNZIONA! TORNA NEL LOOP DOPO SCISSIONE? IN TEORIA SI*/
 }
