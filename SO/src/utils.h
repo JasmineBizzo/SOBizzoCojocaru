@@ -19,18 +19,15 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 
-#define NUM_ATOMI_MAX 200
-#define PID_SHM 123505
-
-
 struct msgbuff {
 	int mtype;  /*message type*/
-	int mnum_atomico; /*message data*/
 	int mpid;
+	int mnum_atomico;
 } my_msg;
 
+/*
 struct memory {
     int pid[NUM_ATOMI_MAX]; 
-};
+}; */
 
 #endif
