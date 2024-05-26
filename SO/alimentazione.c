@@ -117,12 +117,13 @@ int main(int argc, char * argv[]) {
         nanosleep(&req, NULL);
 		
     	for(int i = 0; i < N_NUOVI_ATOMI; i++) {
+			int num_atomico = rand()%N_ATOM_MAX+1;
 			switch (fork()) {
     			case -1:
         			printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI IN ALIMENTAZIONE\n");
             		kill(getpid(), SIGABRT);
         		case 0:
-					int num_atomico = rand()%N_ATOM_MAX+1;
+					
 					sprintf(sprintf_buffer, "%d", pid_master);
            			args_atomi[1] = strdup (sprintf_buffer);
            			sprintf(sprintf_buffer, "%d", num_atomico);
