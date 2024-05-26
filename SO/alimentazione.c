@@ -5,8 +5,9 @@ int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-int stat_id, sem_pid_atomi;
-int *shm_stat;
+//int stat_id;
+int sem_pid_atomi;
+//int *shm_stat;
 int end_flag = 0;
 
 void read_in();
@@ -76,9 +77,9 @@ const char *file_path = "../src/input.txt";
 }
 
 void endLocal(){
-	/* Memoria condivisa */
+	/* Memoria condivisa 
 	shmdt(shm_stat);
-	shmctl(stat_id, IPC_RMID, NULL);
+	shmctl(stat_id, IPC_RMID, NULL);*/
 
 	/* Semafori */
 	semctl(sem_pid_atomi, 0, IPC_RMID);
@@ -98,8 +99,8 @@ int main(int argc, char * argv[]) {
 
 	read_in();
 	
-	stat_id = shmget(getppid() + 1, sizeof(int) * 15, 0600 | IPC_CREAT);
-	shm_stat = shmat(stat_id, NULL, 0);									
+	/*stat_id = shmget(getppid() + 1, sizeof(int) * 15, 0600 | IPC_CREAT);
+	shm_stat = shmat(stat_id, NULL, 0); */									
 
 	sem_pid_atomi = semget(getppid() + 1, 1, 0600 | IPC_CREAT);
 	sem_release(sem_pid_atomi, 0);
@@ -111,7 +112,6 @@ int main(int argc, char * argv[]) {
 	char sprintf_buffer[100];
 	int pid_master = getppid();
 	while(!end_flag){
-		sleep(3); /**********TOGLI************/
 		req.tv_sec = 0;
         req.tv_nsec = STEP_ALIMENTAZIONE;
         nanosleep(&req, NULL);
@@ -121,9 +121,8 @@ int main(int argc, char * argv[]) {
 			switch (fork()) {
     			case -1:
         			printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI IN ALIMENTAZIONE\n");
-            		kill(getpid(), SIGABRT);
+            		kill(getppid(), SIGABRT);
         		case 0:
-					
 					sprintf(sprintf_buffer, "%d", pid_master);
            			args_atomi[1] = strdup (sprintf_buffer);
            			sprintf(sprintf_buffer, "%d", num_atomico);
@@ -135,7 +134,7 @@ int main(int argc, char * argv[]) {
         	default:
         	break;
         	}
-			printf("\n DOPO SEGNALE IL PROCESSO alimentazione CONTINUA 2 \n");
+			//printf("\n DOPO SEGNALE IL PROCESSO alimentazione CONTINUA 2 \n");
     	}
 	}
 }

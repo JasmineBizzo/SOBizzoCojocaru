@@ -98,7 +98,6 @@ int check_memory_size() {
 
 	/* Riceve i messaggi da msqid e salva i nuovi atomi */
 void add_atom() {
-	printf("SONO IN ADD ATOMi \n");
 	ind = num_atomi_tot[0];
 	int num_bytes =-1;
 	if(!check_memory_size()){
@@ -111,13 +110,13 @@ void add_atom() {
 		/*NOWAIT a caso serve???*/
 		if(msgrcv(msqid, &my_msg, sizeof(my_msg.mpid), 0, IPC_NOWAIT) != -1) {
 			 /*CODA NON VUOTA, LEGGO E SALVO I PID*/
-			printf("Messaggio arrivato ATTIVATORE - ADDATOMO, num_bytes = %d \n", num_bytes);
+			//printf("Messaggio arrivato ATTIVATORE - ADDATOMO, num_bytes = %d \n", num_bytes);
 		
 			pid_atomo[ind] = my_msg.mpid;
 			ind++;
 			num_atomi_tot[0] += 1;
 		} else {
-			printf("Messaggio non arrivato ATTIVATORE /coda vuota - ADDATOMO, num_bytes = %d \n", num_bytes);
+			//printf("Messaggio non arrivato ATTIVATORE /coda vuota - ADDATOMO, num_bytes = %d \n", num_bytes);
 			i = 15; /*esco dal ciclo, non ci sono messaggi*/
 		}
 	}
@@ -133,19 +132,18 @@ void choose_atom() {
 	/*Poi incremento il counter delle attivazioni in shm */
 	while(semctl(sem_writeShm, 0, GETVAL) != 1);
 		sem_reserve(sem_writeShm, 0);
-	printf("Attiv245 sem write dopo reserve 0 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
-			
+	//printf("Attiv135 sem write dopo reserve 0 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
 		shm_stat[8] = shm_stat[8] + 1; 
 		shm_stat[9] = shm_stat[9] + 1;
 
 		sem_release(sem_writeShm, 0);
-	printf("Attiv 232 writeShm 1 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
+	//printf("Attiv 140 writeShm 1 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
 }
 
 void endLocal() {
 	int i = num_atomi_tot[0];
     if(pid_atomo[i]!= -1) { 
-        for (i; i >= 0; i--) {  
+        for (i; i >= 0; i--) {
             if(pid_atomo[i] != -1){
                 kill(pid_atomo[i], SIGABRT);
             }
@@ -182,22 +180,18 @@ int main(int argc, char argv[]) {
 
 	read_in();
 
-	stat_id = shmget(getppid() + 1, sizeof(int) * 15, 0600 | IPC_CREAT);
+	stat_id = shmget(getppid() + 1, sizeof(int) * 13, 0600 | IPC_CREAT);
 	shm_stat = shmat(stat_id, NULL, 0);
 
 	pid_atomo = malloc(sizeof(int) * N_ATOMI_INIT);
 	num_atomi_tot = malloc(sizeof(int));
-	/*Memoria locale che contiene il num totale di atomi creati
-	La uso per non accedere alla shm in ogni metodo in cui uso ind*/
-
+	/*Memoria locale che contiene il num totale di atomi creati */
 	num_atomi_tot[0] = 0;
-	printf("Num atomi tot in Attivatore 269 %d \n",num_atomi_tot[0]);
 
 	sem_pid_atomi = semget(getppid() + 1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(getppid() + 2, 1, 0600 | IPC_CREAT);
 	//sem_att = semget(getppid() + 3 , 1, 0600 | IPC_CREAT);
 
-	printf("creazione / individuazione coda di messaggi\n");
 	msqid = msgget(getppid() + 1, IPC_CREAT | 0600);
 	
 	//sem_setval(sem_att, 0, 0);
@@ -206,8 +200,6 @@ int main(int argc, char argv[]) {
 	/*Per iniziare il suo ciclo, l'Attivatore attentde che tutti gli atomi siano creati */
 	while(semctl(sem_pid_atomi, 0, GETVAL) != (N_ATOMI_INIT + 2));
 	//while(semctl(sem_att, 0, GETVAL) != 0);
-
-	printf("ATTIVATORE CONTINUA. 338 fa choose atom \n");
 	
 	/* Al secondo 0 per introdurre dell'energia, poi entro nel while per ogni STEP_ATTIVATORE */
 	for(int l = 0; l < 2; l++) {
@@ -220,7 +212,6 @@ int main(int argc, char argv[]) {
 	//sem_reserve(sem_att, 0); /*master può iniziare la stampa*/
 	
 	while(t <= SIM_DURATION && !end_flag) { 
-		printf("ECCOMI attivatore ciclo while 384 \n");
 		req.tv_sec = 1;
         req.tv_nsec = 0;
         nanosleep(&req, NULL);

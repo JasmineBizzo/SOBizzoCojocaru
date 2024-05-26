@@ -107,33 +107,32 @@ void scissione() {
  	char * args_atomi[]  = {"atomo.c", NULL};
     char ato[] = {"../src/atomo"};
 	if (fork() == -1) {
-		printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI INIZIALI\n");
-        kill(shm_stat[12], SIGABRT);
+		printf("MELTDOWN: ERRORE NELLA FORK PER LA SCISSIONE DEGLI ATOMI \n");
+        kill(num_atom[1], SIGABRT);
 	} else if (fork() == 0) {
 		sprintf(sprintf_buffer, "%d", num_atom[1]);
         args_atomi[1] = strdup (sprintf_buffer);
         sprintf(sprintf_buffer, "%d", num_atomico_child);
 		args_atomi[2] = strdup (sprintf_buffer);
 
-        printf("VEDIAMO ARGS_ATOMI: %d %d\n", atoi(args_atomi[1]), atoi(args_atomi[2]));
+      //  printf("VEDIAMO ARGS_ATOMI: %d %d\n", atoi(args_atomi[1]), atoi(args_atomi[2]));
 		execve(ato, args_atomi, NULL);
      	exit(0);
 	} 	
+	int energy_created = (num_atom[0] * num_atomico_child) - num_atomico_child;
 
 	/* Incremento i counter nella shm */
 	while(semctl(sem_writeShm, 0, GETVAL) != 1);
-		sem_reserve(sem_writeShm, 0);
-		printf("Attiv245 sem write dopo reserve 0 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
-		
-		int energy_created = (num_atom[0] * num_atomico_child) - num_atomico_child;
-		shm_stat[0] = shm_stat[0] + energy_created; /* aumento il contatore dell'energia */
-		shm_stat[1] = shm_stat[1] + energy_created;
-		shm_stat[10] = shm_stat[10] + energy_created;
-		shm_stat[6] = shm_stat[6] + 1; /* aumento il contatore delle scissioni */
-		shm_stat[7] = shm_stat[7] + 1;	
+	sem_reserve(sem_writeShm, 0);
+	//printf("Attiv245 sem write dopo reserve 0 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
+	shm_stat[0] = shm_stat[0] + energy_created; /* aumento il contatore dell'energia */
+	shm_stat[1] = shm_stat[1] + energy_created;
+	shm_stat[10] = shm_stat[10] + energy_created;
+	shm_stat[6] = shm_stat[6] + 1; /* aumento il contatore delle scissioni */
+	shm_stat[7] = shm_stat[7] + 1;	
 
 	sem_release(sem_writeShm, 0);
-	printf("Attiv 232 writeShm 1 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
+	//printf("Attiv 232 writeShm 1 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
 }
 	
 void endLocal(){ 
@@ -149,7 +148,7 @@ void endLocal(){
 	/* Coda di messaggi */
 	msgctl(msqid, IPC_RMID, NULL);
 	
-	free(num_atom);
+	//free(num_atom); /********DA PROBLEMI**********/
 	printf("ATOMO MUORE \n");
 	exit(0);
 }
@@ -168,7 +167,7 @@ int main(int argc, char * argv[]) {
 
 	read_in();
 
-	stat_id = shmget(num_atom[1] + 1, sizeof(int) * 15, 0600 | IPC_CREAT); // creazione area di memoria condivisa
+	stat_id = shmget(num_atom[1] + 1, sizeof(int) * 13, 0600 | IPC_CREAT); // creazione area di memoria condivisa
 	shm_stat = shmat(stat_id, NULL, 0);			// collegare l'area a un puntatore
  
  	sem_pid_atomi = semget(num_atom[1] + 1, 1, 0600 | IPC_CREAT);
@@ -178,15 +177,14 @@ int main(int argc, char * argv[]) {
 	msqid = msgget(num_atom[1] + 1, IPC_CREAT | 0600);
 	
 	/* Invio messaggio ad Attivatore che salva il pid dell'atomo */
-	printf("DEVO ESSERE SALVATO, QUINDI INVIO MESSAGGIO AD ATTIVATORE \n");
 	my_msg.mtype = 1;
 	my_msg.mpid = getpid();
 	msgsnd(msqid, &my_msg, sizeof(my_msg.mpid), 0);
 	
 	/* ANCHE GLI ATOMI CREATI DURANTE LA SIMULAZIONE LO AUMENTANO, MODO PER RISOLVERE? :( */
 	sem_release(sem_pid_atomi, 0);
-	printf("IN ATOMO 230 dopo pid atomi - SEM pid atomi = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
-	printf("ATOMO CONTINUA \n");
+	
+	//printf("ATOMO CONTINUA \n");
 	while(!end_flag);
 	/*Esce dal loop per chiamare signal handler quando riceve un segnale da attivatore*/
 }
