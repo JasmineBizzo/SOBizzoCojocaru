@@ -7,19 +7,20 @@ int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
 int stat_id, atom_pid_id, atom_num_id;
 int *shm_stat, *shm_atom_pid, *shm_atom_num;
-int sem_pid_atomi, sem_writeShm;
+int sem_pid_atomi, sem_writeShm, sem_saveatom;
 //pid_t pidAttivatore, pidAliment; 
 struct msgbuff my_msg_alim; 
-int msqid_alim;
+int msqid_init;
+int end_flag = 0; /*diventa 1 solo quando il processo può terminare*/
 
 void read_in();
 void endLocal();
 //void choose_atom();
 
-
 void handle_signal(int signal) {
 	switch (signal){
 		case SIGABRT:
+			end_flag = 1;
 			endLocal();
 		break;
 		default:
@@ -83,7 +84,6 @@ int main(int argc, char * argv[]) {
 	srand(time(NULL)); //senza a ogni esecuzione del programma viene sempre estratto lo stesso numero
 	
 	//int intervallo = STEP_ALIMENTAZIONE;
-
 	struct timespec req;
 	
 	struct sigaction sa;
@@ -106,12 +106,12 @@ int main(int argc, char * argv[]) {
 
 	sem_pid_atomi = semget(getppid() + 1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(getppid() + 2, 1, 0600 | IPC_CREAT);
+	sem_saveatom = semget(getpid() + 4, 1, 0600 | IPC_CREAT);
 
-	msqid_alim = msgget(getppid() + 2, IPC_CREAT | IPC_EXCL | 0600);
+	msqid_init = msgget(getppid() + 2, IPC_CREAT | 0600);
 
 
-
-	int t = 0;
+	//int t = 0;
 	
 	printf("IN ALIMENTAZIONE - SEMAFORO = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
 	sem_release(sem_pid_atomi, 0);
@@ -123,51 +123,58 @@ int main(int argc, char * argv[]) {
 	//SIM_DURATION =5;
 //	N_NUOVI_ATOMI = 2;
 	printf("FERMO WHILE \n"); // altrimenti mi va in loop e non vedo altro - 3000 è troppo poco 
-	while(1==0){	//(semctl(sem_pid_atomi, 0, GETVAL) == (N_ATOMI_INIT + 2) && t <= SIM_DURATION
+	while(!end_flag){	//(semctl(sem_pid_atomi, 0, GETVAL) == (N_ATOMI_INIT + 2) && t <= SIM_DURATION
 		req.tv_sec = 0;
-        req.tv_nsec = 3000; //STEP_ALIMENTAZIONE;
+        req.tv_nsec = STEP_ALIMENTAZIONE;
         nanosleep(&req, NULL);
-
 
 		/*printf("ECCOMI Aliment\n");
 		printf("SIM_DURATION %d \n", SIM_DURATION);
 		printf("N_NUOVI_ATOMI %d \n", N_NUOVI_ATOMI);
 		printf("t %d \n", t); */
-		printf("PRIMA FOR aliment\n"); 
-		int i;
-		//if(t == intervallo){
-			// N_NUOVI_ATOMI = 3; /*!!!!*/
-			// N_ATOM_MAX = 10;
-		printf("N_NUOVI_ATOMI: %d \n", N_NUOVI_ATOMI);
+		printf("PRIMA FOR aliment\n");
 			//int i = shm_stat[11]; //i parte dal numero di atomi creati fino a quel momento
 			//int new = shm_stat[11] + N_NUOVI_ATOMI; //ed arriva a questo
-    		for(i = 0; i < N_NUOVI_ATOMI; i++) {
-			
-				switch (fork()) {
-    				case -1:
-        				printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI IN ALIMENTAZIONE\n");
-            			kill(getpid(), SIGABRT);
-        			case 0:
-					
+    	for(int i = 0; i < N_NUOVI_ATOMI; i++) {
+			int pid_master = getppid();
 
-            			execve(ato, args_atomi, NULL); 
-            			exit(0);
-        			break;
-        		default:
+			switch (fork()) {
+    			case -1:
+        			printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI IN ALIMENTAZIONE\n");
+            		kill(getpid(), SIGABRT);
+        		case 0:
+					sem_reserve(sem_saveatom, 0); //atomo quando inizia a crearsi mette saveatom a 0
+
+	       			printf("DEVO ESSERE SALVATO, QUINDI INVIO MESSAGGIO AD ATTIVATORE \n");
+	       			my_msg.mtype = 1;
+	        		my_msg.mpid = getpid();
+            
+	        		printf("CONTENUTO DELLA CODA: %d, %d \n", my_msg.mpid, my_msg.mnum_atomico);
+	       	 		msgsnd(msqid_init, &my_msg, sizeof(my_msg), 0);
+	        		kill(shm_stat[13], SIGUSR2); // SEGNALE AD ATTIVATORE per save atomo*/
+            		while(semctl(sem_saveatom, 0, GETVAL) == 0); /*aspetto si salvi*/
+            // shm_atom[i] = getpid();
+            		sprintf(argv_buffer, "%d", (pid_master));
+            		args_atomi[1] = argv_buffer;
+
+            		execve(ato, args_atomi, NULL); 
+            		exit(0);
         		break;
-        		}
-				printf("\n DOPO SEGNALE IL PROCESSO CONTINUA 2 \n");
+        	default:
+        	break;
+        	}
+			printf("\n DOPO SEGNALE IL PROCESSO CONTINUA 2 \n");
 
-				sem_reserve(sem_writeShm, 0);
-				shm_stat[11] = shm_stat[11] + 1; /*aumento atomi totali*/
-				sem_release(sem_writeShm, 0);
+			/*sem_reserve(sem_writeShm, 0);
+			shm_stat[11] = shm_stat[11] + 1; //aumento atomi totali
+			sem_release(sem_writeShm, 0);*/
     		}
 			
 		}
 		
-		t++;
+		//t++;
 		//intervallo += STEP_ALIMENTAZIONE;
-		printf("\n DOPO SEGNALE IL PROCESSO CONTINUA 3 \n");
+		printf("\n DOPO SEGNALE IL PROCESSO CONTINUA ALIMENTAZIONE 177\n");
 	//}
 }
 

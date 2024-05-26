@@ -8,7 +8,7 @@ int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
 int * pid_atomo, * num_atomico, * num_atomi_tot;
-int stat_id, msqid, ind; // atom_pid; //, atom_num_id;
+int stat_id, msqid, msqid_init, ind; // atom_pid; //, atom_num_id;
 int *shm_stat;// *shm_atom; //, *shm_atom_num;
 int sem_pid_atomi, sem_writeShm, sem_att, sem_saveatom;
 //pid_t pidAttivatore, pidAliment; 
@@ -16,6 +16,7 @@ struct msgbuff my_msg; //my_msg_createAtom,
 
 void read_in();
 void add_atom();// aggiunge atomi quando riceve SIGUSR1
+void add_atom_init();
 int check_memory_size(); // controlla se ho spazio per salvare l'atomo
 void choose_atom(); // sceglie atomo da scindere
 //void found_waste(); // trovato scoria
@@ -32,11 +33,12 @@ void handle_signal(int signal) {
 			endLocal();
 		break;
 		case SIGUSR1: /*salva l'atomo nella tabella */
-			printf("\nATTIVATORE RICEVE SEGNALE add atom init\n");
+			printf("\nATTIVATORE RICEVE SEGNALE 1 add atom\n");
 			add_atom();
 		break;
-		case SIGUSR2: /*Lo useremo con alimentazione?*/
-			//found_waste();
+		case SIGUSR2: /*Lo useremo con atimo nuovi*/
+			printf("\nATTIVATORE RICEVE SEGNALE 2 add atom INIT\n");
+			add_atom_init();
 		default:
 		break;
 	}
@@ -112,15 +114,14 @@ void add_atom() {
 		printf("Messaggio arrivato ATTIVATORE - ADDATOMO, num_bytes = %d \n", num_bytes);
 		printf("CONTENUTO DELLA CODA att: %d, %d \n", my_msg.mpid, my_msg.mnum_atomico);
 	}
-	printf("Riga 115 attivatore\n");	
 	pid_atomo[ind] = my_msg.mpid;
 
 	printf("Riga 120 attivatore\n");
-	if (my_msg.mnum_atomico == 0) { /*L'atomo è nuovo, Genero numero atomico random*/
+	/*if (my_msg.mnum_atomico == 0) { /*L'atomo è nuovo, Genero numero atomico random
 		num_atomico[ind] = rand()%N_ATOM_MAX+1;
 	} else { /*se l'atomo nasce da una scissione*/
-		num_atomico[ind]= my_msg.mnum_atomico; /*Passo già il num atomico del figlio*/
-	}
+	num_atomico[ind]= my_msg.mnum_atomico; /*Passo già il num atomico del figlio*/
+	//}
 
 	printf("HO SALVATO L'ATOMO NUOVO CON PID: %d , NUMERO ATOMICO %d\n", pid_atomo[ind], num_atomico[ind]);
 
@@ -129,7 +130,35 @@ void add_atom() {
 
 	//if(ind <= N_ATOMI_INIT) //serve per atomi iniziali e non
 	sem_release(sem_saveatom, 0); //metto a 1, così che atomo continui
+}
+
+void add_atom_init(){
+	printf("SONO IN ADD ATOMO INIT \n");
+	ind = num_atomi_tot[0];
+	int num_bytes =-1;
+	if(!check_memory_size()){
+		perror("Insufficient memory \n");
+		return;
+	}
+	num_bytes = msgrcv(msqid_init, &my_msg, sizeof(my_msg), 0, 0); //Coda con atomo o master
+
+	if(num_bytes < 0){
+		printf("Messaggio non arrivato ATTIVATORE - ADDATOMO, num_bytes = %d \n", num_bytes);
+		//return;
+	} else {
+		printf("Messaggio arrivato ATTIVATORE - ADDATOMO, num_bytes = %d \n", num_bytes);
+	}	
+	pid_atomo[ind] = my_msg.mpid;
+	/*L'atomo è nuovo, Genero numero atomico random*/
+	num_atomico[ind] = rand()%N_ATOM_MAX+1;
 	
+	printf("HO SALVATO L'ATOMO NUOVO CON PID: %d , NUMERO ATOMICO %d\n", pid_atomo[ind], num_atomico[ind]);
+
+	ind++;
+	num_atomi_tot[0] += 1; //Aumento numero di atomi
+
+	//if(ind <= N_ATOMI_INIT) //serve per atomi iniziali e non
+	sem_release(sem_saveatom, 0); //metto a 1, così che atomo continui
 }
 
 int check_memory_size() { 
@@ -327,6 +356,8 @@ int main(int argc, char argv[]) {
 
 	printf("creazione / individuazione coda di messaggi\n");
 	msqid = msgget(getppid() + 1, IPC_CREAT | 0600); // CODA CON ATOMO 
+
+	msqid_init = msgget(getppid() + 2, IPC_CREAT | 0600);
 	///IPC_EXCL | 
 	//msqid_createAtom = msgget(getppid() + 2, IPC_CREAT | 0600); // CODA CON ALIMENTAZIONE
 

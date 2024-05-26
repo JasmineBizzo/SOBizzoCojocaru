@@ -126,8 +126,9 @@ void scissione() {
 		printf("CONTENUTO DELLA CODA: %d, %d \n", my_msg.mpid, my_msg.mnum_atomico);
 		msgsnd(msqid, &my_msg, sizeof(my_msg), 0);
 		kill(shm_stat[13], SIGUSR1); // SEGNALE AD ATTIVATORE per save atomo figlio
-
-   		char argv_buffer[50];
+        while(semctl(sem_saveatom, 0, GETVAL) == 0); /*aspetto si salvi*/
+   		
+		char argv_buffer[50];
  		char * args_atomi[]  = {"atomo.c", NULL};
     	char ato[] = {"../src/atomo"}; 
 

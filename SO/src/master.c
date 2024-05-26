@@ -5,7 +5,7 @@ int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-int valuePreSim, stat_id, msqid; //, atom_pid;
+int valuePreSim, stat_id, msqid, msqid_init; //, atom_pid;
 int *shm_stat; //, *shm_atom;
 int sem_pid_atomi, sem_writeShm, sem_att, sem_saveatom;
 //int ind = 0;
@@ -260,8 +260,10 @@ int main(int argc, char *argv[]) {
     sem_setval(sem_saveatom, 0, 1);
     
     /* MESSAGE QUEUE */ 
-	msqid = msgget(getpid() + 1, IPC_CREAT | 0600); // CODA TRA ATTIVATORE E ATOMO PER SCISSIONE
-	// IPC_EXCL |
+	//msqid = msgget(getpid() + 1, IPC_CREAT | 0600); // CODA TRA ATTIVATORE E ATOMO PER SCISSIONE
+	msqid_init = msgget(getpid() + 2, IPC_CREAT | 0600);
+    
+    // IPC_EXCL |
    // msqid_createAtom = msgget(getpid() + 2, IPC_CREAT | 0600); // CODA TRA ATTIVATORE E ALIMENTAZIONE
 
    
@@ -318,9 +320,9 @@ int main(int argc, char *argv[]) {
 	        my_msg.mpid = getpid();
             
 	        printf("CONTENUTO DELLA CODA: %d, %d \n", my_msg.mpid, my_msg.mnum_atomico);
-	        msgsnd(msqid, &my_msg, sizeof(my_msg), 0);
-	        kill(shm_stat[13], SIGUSR1); // SEGNALE AD ATTIVATORE per save atomo*/
-            
+	        msgsnd(msqid_init, &my_msg, sizeof(my_msg), 0);
+	        kill(shm_stat[13], SIGUSR2); // SEGNALE AD ATTIVATORE per save atomo*/
+            while(semctl(sem_saveatom, 0, GETVAL) == 0); /*aspetto si salvi*/
             // shm_atom[i] = getpid();
             sprintf(argv_buffer, "%d", (getppid()));
             args_atomi[1] = argv_buffer;
@@ -345,9 +347,9 @@ int main(int argc, char *argv[]) {
     printf("\n");
     
 
-    //printf("ALIMENTAZIONE \n");
+    printf("ALIMENTAZIONE \n");
     /* Generazione processo ALIMENTAZIONE */
-    /*
+    
     switch (fork()) {
     case -1:
         printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEL PROCESSO ALIMENTAZIONE\n");
@@ -362,10 +364,10 @@ int main(int argc, char *argv[]) {
         break;
     }
     printf("IL PROCESSO ALIMENTAZIONE E' PRONTO\n");   
-     while (semctl(sem_pid_atomi, 0, GETVAL) != (valuePreSim + 1));
+    while (semctl(sem_pid_atomi, 0, GETVAL) != (valuePreSim + 1));
     valuePreSim += 1;
-    */
-    sem_release(sem_pid_atomi, 0); /*DA TOGLIERE QUANDO SCOMMENTIAMO ALIMENTAZIONE*/
+    
+   //sem_release(sem_pid_atomi, 0); /*DA TOGLIERE QUANDO SCOMMENTIAMO ALIMENTAZIONE*/
    
     printf("SEMAFORO sem pid in master  ULTIMO CONTROLLO %i \n", semctl(sem_pid_atomi, 0, GETVAL));
     printf("\n");
