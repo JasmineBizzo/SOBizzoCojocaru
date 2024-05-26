@@ -261,13 +261,14 @@ int main(int argc, char *argv[]) {
 
     /* Generazione degli ATOMI INIZIALI */
     for (int i = 0; i < N_ATOMI_INIT; i++) {
-       switch (fork()) {
+       int num_atomico = rand()%N_ATOM_MAX+1;
+    switch (fork()) {
         case -1:
             printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI INIZIALI\n");
             kill(getpid(), SIGABRT);
             break;
         case 0: 
-            int num_atomico = rand()%N_ATOM_MAX+1;
+            
             sprintf(sprintf_buffer, "%d", getppid());
             args_atomi[1] = strdup (sprintf_buffer);
             sprintf(sprintf_buffer, "%d", num_atomico);
