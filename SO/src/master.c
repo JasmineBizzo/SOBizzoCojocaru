@@ -8,6 +8,7 @@ int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 int valuePreSim, stat_id, msqid, msqid_init; //, atom_pid;
 int *shm_stat; //, *shm_atom;
 int sem_pid_atomi, sem_writeShm, sem_att, sem_saveatom;
+int end_flag = 0;
 //int ind = 0;
 // pid_t pidAttivatore, pidAliment; /* process identificator dei process id */
 struct msgbuff my_msg; //, my_msg_createAtom;
@@ -20,6 +21,7 @@ void endSimulation();
 void handle_signal(int signal) {
     switch (signal) {
     case SIGABRT:
+	end_flag = 1;
         endSimulation();
         break;
     default:
@@ -380,7 +382,7 @@ int main(int argc, char *argv[]) {
     printf("INIZIO DELLA SIMULAZIONE\n");
 
    // shm_stat[10] = 20;
-    while (t < SIM_DURATION){ /*SE SERVE metto delle flags qui per interrompere la sim*/
+    while (t < SIM_DURATION && !end_flag){ /*SE SERVE metto delle flags qui per interrompere la sim*/
       
       /* Attendo che gli altri processi facciano le loro cose */
         printf("sem att all'inizio del ciclo Mast389: 1 = %i\n ", semctl(sem_att, 0, GETVAL));
