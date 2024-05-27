@@ -22,12 +22,6 @@
 struct msgbuff {
 	int mtype;  /*message type*/
 	int mpid;
-	int mnum_atomico;
 } my_msg;
-
-/*
-struct memory {
-    int pid[NUM_ATOMI_MAX]; 
-}; */
 
 #endif

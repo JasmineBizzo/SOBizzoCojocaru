@@ -5,31 +5,28 @@ int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-int valuePreSim, stat_id, msqid, msqid_init; //, atom_pid;
-int *shm_stat; //, *shm_atom;
-int sem_pid_atomi, sem_writeShm, sem_att, sem_saveatom;
-int end_flag = 0;
-//int ind = 0;
-// pid_t pidAttivatore, pidAliment; /* process identificator dei process id */
-struct msgbuff my_msg; //, my_msg_createAtom;
+int stat_id, sem_init, sem_writeShm;
+int *shm_stat;
 
 void check_in();
-void secPrint(int *, int);
+void secPrint(int);
 void endSimulation();
 
-/* Handler */
+    /* Handler */
 void handle_signal(int signal) {
     switch (signal) {
     case SIGABRT:
-	end_flag = 1;
         endSimulation();
+        break;
+    case SIGUSR1: /*DA TOGLIERE!!!!*/
+        printf("RICEVUTO SIGUSR1\n");
         break;
     default:
         break;
     }
 }
 
-/* Prendo i parametri inseriti nel file input e ne controllo i parametri */
+    /* Prende i parametri inseriti nel file input e ne fa il controllo */
 void check_in() {
     const char *file_path = "../src/input.txt";
     char buffer[1024];
@@ -81,7 +78,7 @@ void check_in() {
     }
     fclose(file_descriptor);
 
-    /*qui posso usare exit(-1) perchè non ho ancora allocato memorie, sh, semafori etc quando la chiamo */
+    /* Posso usare exit(-1) perchè non ho ancora allocato shm e semafori etc quando la chiamo */
     if (ENERGY_DEMAND < 0){
         printf("ERRORE: IL NUMERO DI ENERGY_DEMAND DEVE ESSERE MAGGIORE DI 0\n");
         exit(-1);
@@ -120,8 +117,8 @@ void check_in() {
     }
 }
 
-/* Eseguo la print ogni secondo */
-void secPrint(int *shm_stat, int sec) {
+    /* Esegue la print ogni secondo */
+void secPrint(int sec) {
     printf("\033[0;33m");
     printf("AL SECONDO\t->\t[%d]\n", sec);
     printf("\033[0m");
@@ -134,8 +131,8 @@ void secPrint(int *shm_stat, int sec) {
     printf("\n");
     printf("L\'ENERGIA PRODOTTA NELL\'ULTIMO SECONDO E\' STATA\t->\t[\033[1;32m%d\033[0m]\n", shm_stat[1]);
     printf("L\'ENERGIA PRODOTTA TOTALE E\' \t->\t[\033[1;32m%d\033[0m]\n", shm_stat[0]);
+    printf("L\'ENERGIA DISPONIBILE PER IL PROSSIMO PRELIEVO E\' \t->\t[\033[1;32m%d\033[0m]\n", shm_stat[10]);
     printf("\n");
-
     printf("L\'ENERGIA CONSUMATA NELL\'ULTIMO SECONDO E\' STATA\t->\t[\033[2;32m%d\033[0m]\n", shm_stat[3]);
     printf("L\'ENERGIA CONSUMATA TOTALE E\' \t->\t[\033[2;32m%d\033[0m]\n", shm_stat[2]);
     printf("\n");
@@ -145,69 +142,42 @@ void secPrint(int *shm_stat, int sec) {
     printf("\033[0;33m");
     printf("--------------------------------------------------------------------------------\n");
     printf("\033[0m");
-    /*Potrei aggiungere la stampa dell'enegia disponibile, al netto dei vari prelievi di energy demand */
-    //printf("EXTRA %d \n", shm_stat[10]);
 }
 
-/* Invio un SIGABRT a tutti i processi e termino il Master stesso */
+/* Invio un SIGABRT a tutti i processi indicandogli di terminare */
 void endSimulation() {
-    /*
-    int i = pos_AtomPid;
-    if(pid_atomo[i]!= -1) {
-        for (i; i >= 0; i--) {
-            if(pid_atomo[i] != -1){
-                kill(pid_atomo[i], SIGABRT);
-            }
-        }
-    } */
+    if (shm_stat[12] != -1)
+        kill(shm_stat[12], SIGABRT);
 
-    if (shm_stat[13] != -1)
-        kill(shm_stat[13], SIGABRT);
+    if (shm_stat[11] != -1)
+        kill(shm_stat[11], SIGABRT);
 
-    if (shm_stat[14] != -1)
-        kill(shm_stat[14], SIGABRT);
+    while(wait(NULL) != -1); /*SERVE CREDO MA CONTROLLA???????????*/
 
-    /*shared memories*/
+    /* Memoria condivisa */
     shmdt(shm_stat);
-
     shmctl(stat_id, IPC_RMID, NULL);
 
-    /*semafori*/
-    semctl(sem_pid_atomi, 0, IPC_RMID);
+    /* Semafori */
+    semctl(sem_init, 0, IPC_RMID);
     semctl(sem_writeShm, 0, IPC_RMID);
-    semctl(sem_att, 0, IPC_RMID);
-    semctl(sem_saveatom, 0, IPC_RMID);
-
-    // free(pid_atomo);
-    msgctl(msqid, IPC_RMID, NULL);
-   // msgctl(msqid_createAtom, IPC_RMID, NULL);
 }
 
 int main(int argc, char *argv[]) {
-    int t = 0; /* indice dei secondi che passano */
-    int pid_master = getpid(); /*POI TOGLI*/
-    printf("PID MASTER: %d \n", pid_master);
-    
-    srand(time(NULL));
     struct timespec req;
+    srand(time(NULL));
+
     struct sigaction sa;
     bzero(&sa, sizeof(sa));        /*set all bytes to 0*/
     sa.sa_handler = handle_signal; /*puntatore alla funzione handler dei segnali*/
     sigaction(SIGABRT, &sa, NULL); /*set del signal handler*/
-      // sigaction(SIGUSR1, &sa, NULL);
-
- /*sigset_t mask_block;
-    int status, errno;
-    int flag = 1;
-    sigemptyset(&mask_block);
-    sigaddset(&mask_block, SIGINT);
-    sigprocmask(SIG_BLOCK, &mask_block, NULL); */
-
+    sigaction(SIGUSR1, &sa, NULL); /******dA TOGLIERE!!!!*/
+    
     check_in(); /* da chiamare prima di creare shm e semafori!! */
 
     /**
      * SHARED MEMORY
-     * Pid master + 1: array dei dati necessari per la stampa shm_stat[i]
+     * Pid master + 1: array dei dati necessari per la stampa + pid di attivatore e alimentazione
      *
      * shm_stat[0] = int energy; totale, non tiene conto dei prelievi del master
      * shm_stat[1] = int energy_sec;
@@ -219,58 +189,28 @@ int main(int argc, char *argv[]) {
      * shm_stat[7] = int num_scissioni_sec;
      * shm_stat[8] = int num_attivazioni;
      * shm_stat[9] = int num_attivazioni_sec;
+     * shm_stat[10] = energia disponibile quando il master preleva l'Energy Demand;
      *
-     * shm_stat[10] = energia generata dagli atomi, disponibile quando il master preleva l'Energy Demand;
-     * shm_stat[11] = int num_atom_tot, counter di tutti gli atomi effettivamente generati
-     * shm_stat[12] = pid del master
-     * shm_stat[13] = pid dell'attivatore
-     * shm_stat[14] = pid dell'alimentazione
-     * 
+     * shm_stat[11] = pid dell'attivatore
+     * shm_stat[12] = pid dell'alimentazione
      */
-
-    stat_id = shmget(getpid() + 1, sizeof(int) * 15, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
-    shm_stat = shmat(stat_id, NULL, 0);                                 /*collega l'area a un puntatore*/
+    stat_id = shmget(getpid() + 1, sizeof(int) * 13, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
+    shm_stat = shmat(stat_id, NULL, 0); /*collega l'area a un puntatore*/
    
-   // atom_pid = shmget(getpid() + 2, sizeof(int) * N_ATOMI_INIT, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
-    //shm_atom = shmat(atom_pid, NULL, 0);                                   /*collega l'area a un puntatore*/
-
-    shm_stat[12] = getpid();
-   // shm_stat[11] = N_ATOMI_INIT; FORSE non lo uso?
-
     /**
      * SEMAFORI
      * pid master + 1: Gestisce la creazione iniziale di tutti i processi
-     * pid master + 2:
-     * pid master + 3:
-     * pid master + 4:
+     * pid master + 2: Gestisce la scrittura nella memoria condivisa
      */
 
-    sem_pid_atomi = semget(getpid() + 1, 1, 0600 | IPC_CREAT);
-    sem_setval(sem_pid_atomi, 0, 0); /*Parte da 0 e arriva a (N_ATOMI_INIT + 2)*/
-    printf("VALORE SEMAFORO SEM_PID_ATOMI: %i \n", semctl(sem_pid_atomi, 0, GETVAL));
-    int valuePreSim = 0; /*Valore per effettuare controlli su sem_pid_atomi*/
-    printf("VALORE valuePreSim: %d \n", valuePreSim);
+    sem_init = semget(getpid() + 1, 1, 0600 | IPC_CREAT);
+    sem_setval(sem_init, 0, (N_ATOMI_INIT + 2));
 
     sem_writeShm = semget(getpid() + 2, 1, 0600 | IPC_CREAT);
     sem_setval(sem_writeShm, 0, 1);
     
-    sem_att = semget(getpid() + 3, 1, 0600 | IPC_CREAT);
-    sem_setval(sem_att, 0, 1);
-    printf("VALORE SEMAFORO SEM_ATT: %i \n ", semctl(sem_att, 0, GETVAL));
-
-    sem_saveatom = semget(getpid() + 4, 1, 0600 | IPC_CREAT); // mi serve per aspettare che attivatore salvi gli atomi
-    sem_setval(sem_saveatom, 0, 1);
-    
-    /* MESSAGE QUEUE */ 
-	//msqid = msgget(getpid() + 1, IPC_CREAT | 0600); // CODA TRA ATTIVATORE E ATOMO PER SCISSIONE
-	msqid_init = msgget(getpid() + 2, IPC_CREAT | 0600);
-    
-    // IPC_EXCL |
-   // msqid_createAtom = msgget(getpid() + 2, IPC_CREAT | 0600); // CODA TRA ATTIVATORE E ALIMENTAZIONE
-
-   
     /* array di stringhe, terminanti con NULL, da passare in execve() */
-    char argv_buffer[50]; /*!!!!!!!!*/
+    char sprintf_buffer[100];
     char *args_atomi[] = {"atomo.c", NULL};
     char *args_attivatore[] = {"attivatore.c", NULL};
     char *args_aliment[] = {"alimentazione.c", NULL};
@@ -278,170 +218,108 @@ int main(int argc, char *argv[]) {
     char att[] = {"../src/attivatore"};
     char aliment[] = {"../src/alimentazione"};
 
-    printf("\nATTIVATORE \n");
-    /* Generazione processo ATTIVATORE */
-    switch (fork()) {
-    case -1:
-        printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEL PROCESSO ATTIVATORE\n");
-        kill(getpid(), SIGABRT);
-        break;
-    case 0:
-        shm_stat[13] = getpid();
-        execve(att, args_attivatore, NULL);
-        exit(0);
-        break;
-    default:
-        break;
-    }
-    //printf("valuePreSim = %d \n", valuePreSim);
-    while (semctl(sem_pid_atomi, 0, GETVAL) != (valuePreSim + 1));
-    valuePreSim += 1;
-    printf("MASTER valuePreSim DOPO ATTIVATORE 3 = %d \n", valuePreSim);
-    printf("master SEMAFORO SEM_PID_ATOMI 3 = %i \n", semctl(sem_pid_atomi, 0, GETVAL));
-
-    printf("\nIL PROCESSO ATTIVATORE E' PRONTO\n");
-
-
-    printf("\nATOMI: \n");
     /* Generazione degli ATOMI INIZIALI */
     for (int i = 0; i < N_ATOMI_INIT; i++) {
-        printf("prima DELLA CREAZIONE ATOMO m305 sem pid atomi %i \n", semctl(sem_pid_atomi, 0, GETVAL));
-
+        int num_atomico = rand()%N_ATOM_MAX+1;
         switch (fork()) {
         case -1:
             printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI INIZIALI\n");
             kill(getpid(), SIGABRT);
             break;
-            /* printf("MELTDOWN: %s", strerror(errno));
-             exit(-1);*/
         case 0: 
-            sem_reserve(sem_saveatom, 0); //atomo quando inizia a crearsi mette saveatom a 0
+            sprintf(sprintf_buffer, "%d", getppid());
+            args_atomi[1] = strdup (sprintf_buffer);
+            sprintf(sprintf_buffer, "%d", num_atomico);
+		    args_atomi[2] = strdup (sprintf_buffer);
 
-	        printf("DEVO ESSERE SALVATO, QUINDI INVIO MESSAGGIO AD ATTIVATORE \n");
-	        my_msg.mtype = 1;
-	        my_msg.mpid = getpid();
-            
-	        printf("CONTENUTO DELLA CODA: %d, %d \n", my_msg.mpid, my_msg.mnum_atomico);
-	        msgsnd(msqid_init, &my_msg, sizeof(my_msg), 0);
-	        kill(shm_stat[13], SIGUSR2); // SEGNALE AD ATTIVATORE per save atomo*/
-            while(semctl(sem_saveatom, 0, GETVAL) == 0); /*aspetto si salvi*/
-            // shm_atom[i] = getpid();
-            sprintf(argv_buffer, "%d", (getppid()));
-            args_atomi[1] = argv_buffer;
-            // printf("VEDIAMO IL BUFFER: %s \n", argv_buffer);
-            // sprintf(argv_buffer + j + 1, "%d", rand()%(N_ATOM_MAX+1)+1);
-		    //args_atomi[2] = argv_buffer;
-            printf("VEDIAMO ARGS_ATOMI 1: %d \n", atoi(args_atomi[1]));
-            // printf("VEDIAMO ARGS_ATOMI 2: %d \n", atoi(args_atomi[2]));
             execve(ato, args_atomi, NULL);
             exit(0);
             break;
         default:
             break;
         }
-       
-        while (semctl(sem_pid_atomi, 0, GETVAL) != (valuePreSim + 1));
-        valuePreSim += 1;
-        printf("dopo atomo SEMAFORO PID ATOMI: %i \n", semctl(sem_pid_atomi, 0, GETVAL));
-        printf("dopo atomo valuePreSim %i \n", valuePreSim);
     }
-    printf("TUTTI GLI ATOMI SONO PRONTI\n");
-    printf("\n");
-    
+    /* Attendiamo che tutti gli atomi siano pronti, visto che serviranno ad attivatore*/
+    while (semctl(sem_init, 0, GETVAL) > 2); /*DA LASCIARE O SI FOTTE TUTTO*/
+    printf("TUTTI GLI ATOMI INIZIALI SONO PRONTI\n");
 
-    printf("ALIMENTAZIONE \n");
+ /* Generazione processo ATTIVATORE */
+    switch (fork()) {
+    case -1:
+        printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEL PROCESSO ATTIVATORE\n");
+        kill(getpid(), SIGABRT);
+        break;
+    case 0:
+        shm_stat[11] = getpid();
+        execve(att, args_attivatore, NULL);
+        exit(0);
+        break;
+    default:
+        break;
+    }
+    //while (semctl(sem_init, 0, GETVAL) > 1);
+    printf("IL PROCESSO ATTIVATORE E' PRONTO\n");
+
     /* Generazione processo ALIMENTAZIONE */
-    
     switch (fork()) {
     case -1:
         printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEL PROCESSO ALIMENTAZIONE\n");
         kill(getpid(), SIGABRT);
         break;
     case 0:
-        shm_stat[14] = getpid();
+        shm_stat[12] = getpid();
         execve(aliment, args_aliment, NULL);
         exit(0);
         break;
     default:
         break;
     }
-    printf("IL PROCESSO ALIMENTAZIONE E' PRONTO\n");   
-    while (semctl(sem_pid_atomi, 0, GETVAL) != (valuePreSim + 1));
-    valuePreSim += 1;
-    
-   //sem_release(sem_pid_atomi, 0); /*DA TOGLIERE QUANDO SCOMMENTIAMO ALIMENTAZIONE*/
-   
-    printf("SEMAFORO sem pid in master  ULTIMO CONTROLLO %i \n", semctl(sem_pid_atomi, 0, GETVAL));
-    printf("\n");
+    printf("IL PROCESSO ALIMENTAZIONE E' PRONTO\n");
+//printf("%d", semctl(sem_init, 0, GETVAL));
 
-    /* Aspetto fin quando il semaforo non è a 0, ovvero non sono stati creati tutti gli atomi */
-    while (semctl(sem_pid_atomi, 0, GETVAL) != (N_ATOMI_INIT + 2));
+    int t = 0; /* indice dei secondi che passano */
 
-    printf("\n");
+    /* Aspetto fin quando non sono stati creati tutti i processi */
+    while (semctl(sem_init, 0, GETVAL) != 0);
 
     printf("INIZIO DELLA SIMULAZIONE\n");
 
-   // shm_stat[10] = 20;
-    while (t < SIM_DURATION && !end_flag){ /*SE SERVE metto delle flags qui per interrompere la sim*/
-      
-      /* Attendo che gli altri processi facciano le loro cose */
-        printf("sem att all'inizio del ciclo Mast389: 1 = %i\n ", semctl(sem_att, 0, GETVAL));
-        while (semctl(sem_att, 0, GETVAL) == 1);
-           
-        printf("sem att Mast390 dopo while 0 = %i\n ", semctl(sem_att, 0, GETVAL)); //// PROBLEMA QUIIIII XK RIMANE 000000
-  
+    while (t < SIM_DURATION){
         req.tv_sec = 1;
         req.tv_nsec = 0;
         nanosleep(&req, NULL);
-
-        printf("sem write shm Mast254: %i\n ", semctl(sem_writeShm, 0, GETVAL));
         
-        while(semctl(sem_writeShm, 0, GETVAL) == 0);
+    /* Prelievo dell'ENERGY DEMAND */
         sem_reserve(sem_writeShm, 0);
-
-        printf("sem write shm  dopo reserve Mast258: %i\n ", semctl(sem_writeShm, 0, GETVAL));
-
-        /* PRELIEVO DELL'ENERGY DEMAND */
         shm_stat[10] = shm_stat[10] - ENERGY_DEMAND;
-        shm_stat[2] = shm_stat[2] + ENERGY_DEMAND; /*Aumento in shm il contatore di energia consumata*/
+        shm_stat[2] = shm_stat[2] + ENERGY_DEMAND;
         shm_stat[3] = shm_stat[3] + ENERGY_DEMAND;
-        printf("shm stat 10 %d \n", shm_stat[10]);
-        printf("threshold %d \n", ENERGY_EXPLODE_THRESHOLD);
 
         if (shm_stat[10] > ENERGY_EXPLODE_THRESHOLD) {
             printf("EXPLODE: L\'ENERGIA LIBERATA E\' MAGGIORE DEL THRESHOLD\n");
-            kill(getpid(), SIGTERM);
-        }
-        else if (shm_stat[10] < 0) {
+            kill(getpid(), SIGABRT);
+        } else if (shm_stat[10] < 0) {
             printf("BLACKOUT: L\'ENERGIA CHE SI VUOLE PRELEVARE NON E\' DISPONIBILE\n");
-            kill(getpid(), SIGTERM);
+            kill(getpid(), SIGABRT);
         }
 
         t++;
-        secPrint(shm_stat, t);
-        /* Poi azzero le statistiche relative all'ultimo secondo _sec */
+        secPrint(t);
+
+    /* Poi azzero le statistiche relative all'ultimo secondo _sec */
         shm_stat[1] = 0;
         shm_stat[3] = 0;
         shm_stat[5] = 0;
         shm_stat[7] = 0;
         shm_stat[9] = 0;
-        
         sem_release(sem_writeShm, 0);
-
-        sem_release(sem_att, 0); /*attivatore può ricominciare a girare*/
     }
-
     printf("IL TEMPO DI SIMULATIONE IMPOSTATO E' TERMINATO\n");
 
-    /* Fine sumulazione, invio un SIGABRT a tutti i processi indicandogli di terminare*/
     endSimulation();
 
-    while (wait(NULL) != -1); /*???????????*/
+    while(wait(NULL) != -1); /*SERVE CREDO MA CONTROLLA???????????*/
 
     printf("SIMULAZIONE TERMINATA CON SUCCESSO\n");
-
-    /*???????????
-    sigemptyset(&mask_block);
-    sigaddset(&mask_block, SIGINT);
-    sigprocmask(SIG_UNBLOCK, &mask_block, NULL);*/
+    //return 0;
 }
