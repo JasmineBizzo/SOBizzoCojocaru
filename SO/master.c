@@ -5,9 +5,8 @@ int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-int stat_id, sem_init, sem_writeShm;  //, msqid;
+int stat_id, sem_init, sem_writeShm;
 int *shm_stat;
-int end_flag = 0;
 
 void check_in();
 void secPrint(int); //(int *, int);
@@ -17,10 +16,9 @@ void endSimulation();
 void handle_signal(int signal) {
     switch (signal) {
     case SIGABRT:
-        end_flag = 1;
-        //endSimulation(); /* Basta la flag*/
+        endSimulation();
         break;
-    case SIGUSR1:
+    case SIGUSR1: /*DA TOGLIERE!!!!*/
         printf("RICEVUTO SIGUSR1\n");
         break;
     default:
@@ -133,7 +131,7 @@ void secPrint(int sec) { ///(int *shm_stat, int sec) {
     printf("\n");
     printf("L\'ENERGIA PRODOTTA NELL\'ULTIMO SECONDO E\' STATA\t->\t[\033[1;32m%d\033[0m]\n", shm_stat[1]);
     printf("L\'ENERGIA PRODOTTA TOTALE E\' \t->\t[\033[1;32m%d\033[0m]\n", shm_stat[0]);
-    printf("L\'ENERGIA DISPONIBILE PER IL PRELIEVO E\' \t->\t[\033[1;32m%d\033[0m]\n", shm_stat[10]);
+    printf("L\'ENERGIA DISPONIBILE PER IL PROSSIMO PRELIEVO E\' \t->\t[\033[1;32m%d\033[0m]\n", shm_stat[10]);
     printf("\n");
     printf("L\'ENERGIA CONSUMATA NELL\'ULTIMO SECONDO E\' STATA\t->\t[\033[2;32m%d\033[0m]\n", shm_stat[3]);
     printf("L\'ENERGIA CONSUMATA TOTALE E\' \t->\t[\033[2;32m%d\033[0m]\n", shm_stat[2]);
@@ -176,7 +174,7 @@ int main(int argc, char *argv[]) {
     bzero(&sa, sizeof(sa));        /*set all bytes to 0*/
     sa.sa_handler = handle_signal; /*puntatore alla funzione handler dei segnali*/
     sigaction(SIGABRT, &sa, NULL); /*set del signal handler*/
-    sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGUSR1, &sa, NULL); /******dA TOGLIERE!!!!*/
     
     check_in(); /* da chiamare prima di creare shm e semafori!! */
 
@@ -229,23 +227,6 @@ int main(int argc, char *argv[]) {
     char att[] = {"../src/attivatore"};
     char aliment[] = {"../src/alimentazione"};
 
-    /* Generazione processo ATTIVATORE */
-    switch (fork()) {
-    case -1:
-        printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEL PROCESSO ATTIVATORE\n");
-        kill(getpid(), SIGABRT);
-        break;
-    case 0:
-        shm_stat[11] = getpid();
-        execve(att, args_attivatore, NULL);
-        exit(0);
-        break;
-    default:
-        break;
-    }
-    while (semctl(sem_init, 0, GETVAL) != (N_ATOMI_INIT+1));
-    printf("IL PROCESSO ATTIVATORE E' PRONTO\n");
-
     /* Generazione degli ATOMI INIZIALI */
     for (int i = 0; i < N_ATOMI_INIT; i++) {
         int num_atomico = rand()%N_ATOM_MAX+1;
@@ -268,9 +249,27 @@ int main(int argc, char *argv[]) {
             break;
         }
     }
-    while (semctl(sem_init, 0, GETVAL) != 1);
+    while (semctl(sem_init, 0, GETVAL) != 2);
     //printf("%d", semctl(sem_init, 0, GETVAL));
     printf("TUTTI GLI ATOMI INIZIALI SONO PRONTI\n");
+
+ /* Generazione processo ATTIVATORE */
+    switch (fork()) {
+    case -1:
+        printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEL PROCESSO ATTIVATORE\n");
+        kill(getpid(), SIGABRT);
+        break;
+    case 0:
+        shm_stat[11] = getpid();
+        execve(att, args_attivatore, NULL);
+        exit(0);
+        break;
+    default:
+        break;
+    }
+    while (semctl(sem_init, 0, GETVAL) != 1);
+    printf("IL PROCESSO ATTIVATORE E' PRONTO\n");
+
     
     /* Generazione processo ALIMENTAZIONE */
     switch (fork()) {
@@ -294,7 +293,7 @@ int main(int argc, char *argv[]) {
 
     printf("INIZIO DELLA SIMULAZIONE\n");
 
-    while (t < SIM_DURATION && !end_flag){
+    while (t < SIM_DURATION){
         req.tv_sec = 1;
         req.tv_nsec = 0;
         nanosleep(&req, NULL);
@@ -315,8 +314,9 @@ int main(int argc, char *argv[]) {
             kill(getpid(), SIGABRT);
         }
 
-        secPrint(t); ///(shm_stat, t); GIUSTO???????????
-
+        t++;
+        secPrint(t);
+        
     /* Poi azzero le statistiche relative all'ultimo secondo _sec */
         shm_stat[1] = 0;
         shm_stat[3] = 0;
@@ -325,7 +325,7 @@ int main(int argc, char *argv[]) {
         shm_stat[9] = 0;
         sem_release(sem_writeShm, 0);
        //sem_release(sem_att, 0); 
-       t++;
+       
     }
     printf("IL TEMPO DI SIMULATIONE IMPOSTATO E' TERMINATO\n");
 

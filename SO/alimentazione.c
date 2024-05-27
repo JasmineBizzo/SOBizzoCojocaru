@@ -5,9 +5,7 @@ int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-//int stat_id;
-int sem_pid_atomi;
-//int *shm_stat;
+int sem_init;
 int end_flag = 0;
 
 void read_in();
@@ -82,7 +80,7 @@ void endLocal(){
 	shmctl(stat_id, IPC_RMID, NULL);*/
 
 	/* Semafori */
-	semctl(sem_pid_atomi, 0, IPC_RMID);
+	semctl(sem_init, 0, IPC_RMID);
 
 	printf("ALIMENTAZIONE MUORE \n");
 	exit(0);
@@ -96,21 +94,21 @@ int main(int argc, char * argv[]) {
 	bzero(&sa, sizeof(sa));
 	sa.sa_handler = handle_signal;
 	sigaction(SIGABRT, &sa, NULL);
-
-	read_in();
 	
-	/*stat_id = shmget(getppid() + 1, sizeof(int) * 15, 0600 | IPC_CREAT);
+	/*stat_id = shmget(getppid() + 1, sizeof(int) * 13, 0600 | IPC_CREAT);
 	shm_stat = shmat(stat_id, NULL, 0); */									
 
-	sem_pid_atomi = semget(getppid() + 1, 1, 0600 | IPC_CREAT);
-	sem_release(sem_pid_atomi, 0);
-	
-	//while(semctl(sem_pid_atomi, 0, GETVAL) != (N_ATOMI_INIT + 2));
+	sem_init = semget(getppid() + 1, 1, 0600 | IPC_CREAT);
+	sem_reserve(sem_init, 0);
+
+	read_in();
+	//while(semctl(sem_init, 0, GETVAL) != (N_ATOMI_INIT + 2));
 		
 	char ato[] = {"../src/atomo"};
 	char * args_atomi[]  = {"atomo.c", NULL};
 	char sprintf_buffer[100];
 	int pid_master = getppid();
+
 	while(!end_flag){
 		req.tv_sec = 0;
         req.tv_nsec = STEP_ALIMENTAZIONE;

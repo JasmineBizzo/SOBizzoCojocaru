@@ -5,12 +5,10 @@ int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-int * num_atom;
-int stat_id, msqid; 
-int *shm_stat; 
-int sem_pid_atomi, sem_writeShm; 
-struct msgbuff my_msg;
+int * num_atom, * shm_stat;
+int stat_id, msqid, sem_init, sem_writeShm; 
 int end_flag = 0;
+struct msgbuff my_msg;
 
 void read_in();
 void scissione();
@@ -82,11 +80,26 @@ const char *file_path = "../src/input.txt";
     fclose(file_descriptor);
 }
 
-/** Dimezza il proprio numero atomico, fa controllo scorie e poi crea atomo figlio */
+/* Controllo scorie, divisione del proprio numero atomico e creazione atomo figlio */
 void scissione() {
-	int num_atomico_child;
+	/* INIZIO SEZIONE CRITICA */
+	sigset_t maskBlock; /*Per le signal masks del segnale*/
+ 	sigemptyset(&maskBlock);
+    sigaddset(&maskBlock, SIGUSR1);
+    sigprocmask(SIG_BLOCK, &maskBlock, NULL);
+
+	/* Controllo non si crei una SCORIA, se il num atomico è troppo basso termino il processo */
+	if (num_atom[0] <= MIN_N_ATOMICO){
+		sem_reserve(sem_writeShm, 0);
+		shm_stat[4] = shm_stat[4] + 1; /* aumento il contatore delle scorie */
+		shm_stat[5] = shm_stat[5] + 1;	
+		sem_release(sem_writeShm, 0);
+
+		kill(getpid(), SIGABRT);
+	}
 
 	/* Calcolo del num atomico al figlio */
+	int num_atomico_child;	
 	if (num_atom[0] % 2 == 0) { 
 		num_atom[0] /= 2; 
 		num_atomico_child = num_atom[0]; 	
@@ -94,13 +107,6 @@ void scissione() {
 		num_atom[0] /= 2; 
 		num_atomico_child = num_atom[0] + 1;
 	}
-
-	/**Poi controllo che non si crei una SCORIA
-	 * Se questo atomo ha numero atomico troppo basso lo termino e non creo il figlio
-	 */
-	if (num_atom[0] <= MIN_N_ATOMICO) {
-		kill(getpid(), SIGABRT);
-	} 
 
 	/* Creo il figlio della scissione */
 	char sprintf_buffer[100];
@@ -115,14 +121,13 @@ void scissione() {
         sprintf(sprintf_buffer, "%d", num_atomico_child);
 		args_atomi[2] = strdup (sprintf_buffer);
 
-      //  printf("VEDIAMO ARGS_ATOMI: %d %d\n", atoi(args_atomi[1]), atoi(args_atomi[2]));
-		execve(ato, args_atomi, NULL);
+      	execve(ato, args_atomi, NULL);
      	exit(0);
 	} 	
 	int energy_created = (num_atom[0] * num_atomico_child) - num_atomico_child;
 
 	/* Incremento i counter nella shm */
-	while(semctl(sem_writeShm, 0, GETVAL) != 1);
+		//while(semctl(sem_writeShm, 0, GETVAL) != 1);
 	sem_reserve(sem_writeShm, 0);
 	//printf("Attiv245 sem write dopo reserve 0 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
 	shm_stat[0] = shm_stat[0] + energy_created; /* aumento il contatore dell'energia */
@@ -130,9 +135,13 @@ void scissione() {
 	shm_stat[10] = shm_stat[10] + energy_created;
 	shm_stat[6] = shm_stat[6] + 1; /* aumento il contatore delle scissioni */
 	shm_stat[7] = shm_stat[7] + 1;	
-
 	sem_release(sem_writeShm, 0);
 	//printf("Attiv 232 writeShm 1 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
+
+	sigemptyset(&maskBlock);
+    sigaddset(&maskBlock, SIGUSR1);
+	sigprocmask(SIG_UNBLOCK, &maskBlock, NULL);
+	/* FINE SEZIONE CRITICA */
 }
 	
 void endLocal(){ 
@@ -141,36 +150,38 @@ void endLocal(){
 	shmctl(stat_id, IPC_RMID, NULL);
 
 	/* Semafori */
-	semctl(sem_pid_atomi, 0, IPC_RMID);
+	semctl(sem_init, 0, IPC_RMID);
 	semctl(sem_writeShm, 0, IPC_RMID);
     //semctl(sem_att, 0, IPC_RMID);
 
 	/* Coda di messaggi */
 	msgctl(msqid, IPC_RMID, NULL);
 	
-	//free(num_atom); /********DA PROBLEMI**********/
+	free(num_atom); /********DA PROBLEMI**********/
 	printf("ATOMO MUORE \n");
 	exit(0);
 }
 
 int main(int argc, char * argv[]) {
+	/**num_atom[0] = numero atomico di questo atomo
+	 * num_atom[1] = pid del master
+	*/
 	num_atom = malloc(sizeof(int)*2); 							
-	num_atom[0] = atoi(argv[2]);/*Salvo il num atomico di questo atomo in pos 0*/
-	num_atom[1] = atoi(argv[1]);/*In pos 1 c'è il pid del master */
+	num_atom[0] = atoi(argv[2]); 
+	num_atom[1] = atoi(argv[1]);
+	
 	srand(time(NULL));
-
 	struct sigaction sa;
-	bzero(&sa, sizeof(sa));		   // set all bytes to 0
-	sa.sa_handler = handle_signal; // puntatore alla funzione handler dei segnali
-	sigaction(SIGABRT, &sa, NULL); // set del signal handler
+
+	bzero(&sa, sizeof(sa));
+	sa.sa_handler = handle_signal; 
+	sigaction(SIGABRT, &sa, NULL);
 	sigaction(SIGUSR1, &sa, NULL);
 
-	read_in();
-
-	stat_id = shmget(num_atom[1] + 1, sizeof(int) * 13, 0600 | IPC_CREAT); // creazione area di memoria condivisa
-	shm_stat = shmat(stat_id, NULL, 0);			// collegare l'area a un puntatore
+	stat_id = shmget(num_atom[1] + 1, sizeof(int) * 13, 0600 | IPC_CREAT);
+	shm_stat = shmat(stat_id, NULL, 0);	
  
- 	sem_pid_atomi = semget(num_atom[1] + 1, 1, 0600 | IPC_CREAT);
+ 	sem_init = semget(num_atom[1] + 1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(num_atom[1] + 2, 1, 0600 | IPC_CREAT);
 	//sem_att = semget(num_atom[1] + 3 , 1, 0600 | IPC_CREAT);
 	
@@ -181,10 +192,16 @@ int main(int argc, char * argv[]) {
 	my_msg.mpid = getpid();
 	msgsnd(msqid, &my_msg, sizeof(my_msg.mpid), 0);
 	
-	/* ANCHE GLI ATOMI CREATI DURANTE LA SIMULAZIONE LO AUMENTANO, MODO PER RISOLVERE? :( */
-	sem_release(sem_pid_atomi, 0);
+	read_in();
 	
-	//printf("ATOMO CONTINUA \n");
+	/** Solo gli atomi iniziali devono diminuire sem_init ->
+	 * Se sem_init > 1, l'alimenzaione non è ancora stata generata e quindi sono all'inizio 
+	 */
+	if(semctl(sem_init, 0, GETVAL) > 1){
+		sem_reserve(sem_init, 0);
+		//printf("%d\n", semctl(sem_init, 0, GETVAL));
+	}
+	
 	while(!end_flag);
 	/*Esce dal loop per chiamare signal handler quando riceve un segnale da attivatore*/
 }
