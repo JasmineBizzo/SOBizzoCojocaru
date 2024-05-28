@@ -321,5 +321,5 @@ int main(int argc, char *argv[]) {
     while(wait(NULL) != -1); /*SERVE CREDO MA CONTROLLA???????????*/
 
     printf("SIMULAZIONE TERMINATA CON SUCCESSO\n");
-    //return 0;
+    return 0;
 }
