@@ -114,15 +114,15 @@ int main(int argc, char * argv[]) {
                     kill(getppid(), SIGABRT);
         		case 0:
                     sprintf(sprintf_buffer, "%d", pid_master);
-           			args_atomi[1] = strdup (sprintf_buffer);
-           			sprintf(sprintf_buffer, "%d", num_atomico);
-		    		args_atomi[2] = strdup (sprintf_buffer);
+           		    args_atomi[1] = strdup (sprintf_buffer);
+           		    sprintf(sprintf_buffer, "%d", num_atomico);
+		    	    args_atomi[2] = strdup (sprintf_buffer);
 
-            		execve(ato, args_atomi, NULL); 
-            		exit(0);
+            	    execve(ato, args_atomi, NULL); 
+            	    exit(0);
         		break;
         	default:
-        	break;
+        	    break;
         	}
 		}
 	}

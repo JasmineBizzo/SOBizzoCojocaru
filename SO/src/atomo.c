@@ -6,9 +6,9 @@ int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
 int * shm_stat;
-int stat_id, msqid, pid_master, my_num_atom, sem_init, sem_writeShm; 
+int stat_id, msqid, msqid_scorie, pid_master, my_num_atom, sem_init, sem_writeShm; 
 int end_flag = 0;
-struct msgbuff my_msg;
+struct msgbuff my_msg, my_msg_scorie;
 
 void read_in();
 void scissione();
@@ -83,10 +83,10 @@ const char *file_path = "../src/input.txt";
 /* Controllo scorie, divisione del proprio numero atomico e creazione atomo figlio */
 void scissione() {
 	/* INIZIO SEZIONE CRITICA */
-	sigset_t maskBlock; /*Per le signal masks del segnale*/
+	sigset_t maskBlock;
 	sigemptyset(&maskBlock);
 	sigaddset(&maskBlock, SIGUSR1);
-    sigprocmask(SIG_BLOCK, &maskBlock, NULL);
+	sigprocmask(SIG_BLOCK, &maskBlock, NULL);
 
 	/* Controllo non si crei una SCORIA, se il num atomico è troppo basso termino il processo */
 	if (my_num_atom <= MIN_N_ATOMICO){
@@ -95,6 +95,11 @@ void scissione() {
 		shm_stat[5] = shm_stat[5] + 1;	
 		sem_release(sem_writeShm, 0);
 
+		my_msg_scorie.mpid = getpid();
+		my_msg_scorie.mpid = 1;
+		msgsnd(msqid_scorie, &my_msg_scorie, sizeof(my_msg_scorie.mpid), 0);
+
+		kill(shm_stat[10], SIGUSR1);
 		kill(getpid(), SIGABRT);
 	}
 
@@ -128,15 +133,12 @@ void scissione() {
 
 	/* Incremento i counter nella shm */
 	sem_reserve(sem_writeShm, 0);
-	//printf("Attiv245 sem write dopo reserve 0 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
 	shm_stat[0] = shm_stat[0] + energy_created; /* aumento il contatore dell'energia */
 	shm_stat[1] = shm_stat[1] + energy_created;
-	shm_stat[10] = shm_stat[10] + energy_created;
 	shm_stat[6] = shm_stat[6] + 1; /* aumento il contatore delle scissioni */
 	shm_stat[7] = shm_stat[7] + 1;	
 	sem_release(sem_writeShm, 0);
-	//printf("Attiv 232 writeShm 1 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
-
+	
 	sigemptyset(&maskBlock);
 	sigaddset(&maskBlock, SIGUSR1);
 	sigprocmask(SIG_UNBLOCK, &maskBlock, NULL);
@@ -154,8 +156,9 @@ void endLocal(){
 
 	/* Coda di messaggi */
 	msgctl(msqid, IPC_RMID, NULL);
-	
-	printf("ATOMO MUORE \n");
+	msgctl(msqid_scorie, IPC_RMID, NULL);
+
+	//printf("ATOMO MUORE \n");
 	exit(0);
 }
 
@@ -171,13 +174,14 @@ int main(int argc, char * argv[]) {
 	sigaction(SIGABRT, &sa, NULL);
 	sigaction(SIGUSR1, &sa, NULL);
 
-	stat_id = shmget(pid_master + 1, sizeof(int) * 13, 0600 | IPC_CREAT);
+	stat_id = shmget(pid_master + 1, sizeof(int) * 11, 0600 | IPC_CREAT);
 	shm_stat = shmat(stat_id, NULL, 0);	
  
  	sem_init = semget(pid_master + 1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(pid_master + 2, 1, 0600 | IPC_CREAT);
 
 	msqid = msgget(pid_master + 1, IPC_CREAT | 0600);
+	msqid_scorie = msgget(pid_master + 2, IPC_CREAT | 0600);
 
 	my_msg.mtype = 1;
 	my_msg.mpid = getpid();

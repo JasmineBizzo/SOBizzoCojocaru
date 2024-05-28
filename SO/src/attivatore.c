@@ -6,25 +6,27 @@ int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
 int * pid_atomo, * shm_stat;
-int stat_id, msqid, sem_init, sem_writeShm;
+int stat_id, msqid, msqid_scorie, sem_init, sem_writeShm;
 int end_flag = 0;
 int ind = 0; /* Counter del numero di atomi creati*/
-/*ORA LA POSIZIONE 0 DELL'ARRAY RIMANE VUOTA, PER IL RESTO POSSIAMO USARE IND INVECE DI IND-1
-(VEDI ADD ATOM) PRIMA AUMENTIAMO IND E POI SALVIAMO*/
-struct msgbuff my_msg; 
+struct msgbuff my_msg, my_msg_scorie; 
 
 void read_in();
 int check_memory_size();
-void add_atom();
-void choose_atom(); 
+void add_atom();;
+void choose_atom();
+void found_waste();
 void endLocal();
 
 void handle_signal(int signal) {
 	switch (signal){
 		case SIGABRT:
 			end_flag = 1;
-			add_atom();
+			//add_atom();
 			endLocal();
+		break;
+		case SIGUSR1:
+			found_waste();
 		break;
 		default:
 		break;
@@ -85,32 +87,30 @@ void read_in(){
 
 	/* Aumenta la dimensione di pid_atomo se questo è pieno */
 int check_memory_size() {
-	if(pid_atomo[ind] == sizeof(pid_atomo)) {
-		pid_atomo = realloc(pid_atomo, sizeof(int) * 2);
-		if (pid_atomo == NULL) {
+	if(sizeof(int)*ind == sizeof(pid_atomo)) {
+		pid_atomo = realloc(pid_atomo, sizeof(pid_atomo)* 2);
+		/*if (pid_atomo == NULL) {
 			perror("Insufficient memory");
 			return 0;
-		}
+		}*/
 	} else
 		return 1;
 }
 
 	/* Riceve i messaggi da msqid e salva i nuovi atomi */
 void add_atom() {
-	if(!check_memory_size()){
-		perror("Insufficient memory \n");
-		return;
-	}
+	//printf("SONO IN ADD ATOMO\n");
 
-	for(int i = 1; i <= 30; i++){ /***CERCA MODO PER SALVARE TUTTI QUELLI NELLA CODA*/
-		memset(&my_msg, 0, sizeof my_msg.mpid); 
-	/*NOWAIT a caso serve???*/
-		if(msgrcv(msqid, &my_msg, sizeof(my_msg.mpid), 0, 0) != -1) {//IPC_NOWAIT
+	for(int i = 0; i < 100; i++){
+		memset(&my_msg, 0, sizeof my_msg.mpid);
+		if(msgrcv(msqid, &my_msg, sizeof(my_msg.mpid), 0, 0) != -1) {
+			check_memory_size(); /* Controllo la dimensione dell'array ogni volta*/
 			ind++;
-			pid_atomo[ind] = my_msg.mpid;  
-			//printf("ATT 109 HO SALVATO L'ATOMO %d\n", pid_atomo[ind]);
+			pid_atomo[ind-1] = my_msg.mpid;
+			
+			printf("ATT 109 HO SALVATO L'ATOMO %d\n", pid_atomo[ind-1]);
 		} else {
-			i = 15; /* Esco dal ciclo, non ci sono messaggi*/
+			i = 100; /* Esco dal ciclo, non ci sono messaggi*/
 		}
 	}
 }
@@ -118,25 +118,56 @@ void add_atom() {
 	/* Sceglie un atomo casuale a cui inviare il segnale di scissione */
 void choose_atom() {
 	if(ind > 0) {
-		int n = rand()%ind+1;
+		sigset_t maskBlock;
+		sigemptyset(&maskBlock);
+		sigaddset(&maskBlock, SIGUSR1);
+		sigprocmask(SIG_BLOCK, &maskBlock, NULL);
 
-		kill(pid_atomo[ind], SIGUSR1); /*ATOMI MORTI PER SCISSIONE!!!!*/
+		int n = rand()%ind+1;
+		kill(pid_atomo[n], SIGUSR1);
 
 	/* Incremento il counter delle attivazioni in shm */
 		sem_reserve(sem_writeShm, 0);
-	//printf("Attiv135 sem write dopo reserve 0 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
 		shm_stat[8] = shm_stat[8] + 1; 
 		shm_stat[9] = shm_stat[9] + 1;
 		sem_release(sem_writeShm, 0);
-	//printf("Attiv 140 writeShm 1 = %d \n ", semctl(sem_writeShm, 0, GETVAL));
+
+		sigemptyset(&maskBlock);
+		sigaddset(&maskBlock, SIGUSR1);
+		sigprocmask(SIG_UNBLOCK, &maskBlock, NULL);
+	}
+}
+
+	/* Elimina le scorie dall'array che contiene il pid di tutti gli atomi*/
+void found_waste() {
+	for(int i = 0; i <= ind-1; i++) {
+		memset(&my_msg_scorie, 0, sizeof my_msg_scorie.mpid); 
+		if(msgrcv(msqid_scorie, &my_msg_scorie, sizeof(my_msg_scorie), 0, 0) != 1) {
+			if(pid_atomo[i] == my_msg_scorie.mpid)
+				pid_atomo[i] = -1;
+		}
 	}
 }
 
 void endLocal() {
-    for (int i = ind; i > 0; i--) {
-        if(pid_atomo[i] != -1){
+	/*Quelli ancora da salvare*/
+	for(int i = 0; i < 10000; i++) { /*Metti size della queue se possibile*/
+		memset(&my_msg, 0, sizeof my_msg.mpid);
+		if(msgrcv(msqid, &my_msg, sizeof(my_msg.mpid), 0, 0) != -1) {
+			kill(my_msg.mpid, SIGABRT);
+			sem_release(sem_writeShm, 0); /***PROVA*/
+		printf("ATT 157 HO TERMINATO L'ATOMO %d\n", my_msg.mpid);
+		} else
+			i = 10000;
+	}
+
+	/*quelli già salvati*/
+	//printf("NUM DI ATOMI DA UCCIDERE: %d\n", ind);
+    for (int i = 0; i <= ind-1; i++) {
+        if(pid_atomo[i] != -1) {
             kill(pid_atomo[i], SIGABRT);
-			printf("ATT 137 HO TERMINATO L'ATOMO %d\n", pid_atomo[i] );
+			sem_release(sem_writeShm, 0); /***PROVA*/
+			printf("ATT 173 HO TERMINATO L'ATOMO %d\n", pid_atomo[i]);
         }
     }
     
@@ -150,6 +181,7 @@ void endLocal() {
 
 	/* Coda di messaggi */
 	msgctl(msqid, IPC_RMID, NULL);
+	msgctl(msqid_scorie, IPC_RMID, NULL);
 
 	free(pid_atomo);
 	printf("ATTIVATORE MUORE \n");
@@ -164,30 +196,31 @@ int main(int argc, char argv[]) {
 	bzero(&sa, sizeof(sa));
 	sa.sa_handler = handle_signal;
 	sigaction(SIGABRT, &sa, NULL);
+	sigaction(SIGUSR1, &sa, NULL);
 
 	read_in();
 
-	stat_id = shmget(getppid() + 1, sizeof(int) * 13, 0600 | IPC_CREAT);
+	stat_id = shmget(getppid() + 1, sizeof(int) * 11, 0600 | IPC_CREAT);
 	shm_stat = shmat(stat_id, NULL, 0);
 
 	/* array dei pid di tutti gli atomi creati */
-	pid_atomo = malloc(sizeof(int) * N_ATOMI_INIT);
+	pid_atomo = malloc(sizeof(int) * 100);
 
 	sem_init = semget(getppid() + 1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(getppid() + 2, 1, 0600 | IPC_CREAT);
 
 	msqid = msgget(getppid() + 1, IPC_CREAT | 0600);
+	msqid_scorie = msgget(getppid() + 2, IPC_CREAT | 0600);
 	
-	//add_atom(); /* Aspetto che gli atomi si creino con il while e poi lo faccio nel for*/
+	add_atom();
 
 	sem_reserve(sem_init, 0);
 	
 	/* Per introdurre dell'energia, poi entro nel while per ogni STEP_ATTIVATORE */
-	for(int l = 0; l < 2; l++) {
-		add_atom();
-		choose_atom();	
-	}
-	
+	//for(int l = 0; l < 2; l++) {
+	choose_atom();
+	//}
+
 	while(!end_flag) { 
 		req.tv_sec = STEP_ATTIVATORE;
         req.tv_nsec = 0;
