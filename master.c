@@ -9,7 +9,7 @@ int stat_id, sem_init, sem_writeShm;
 int *shm_stat;
 
 void check_in();
-void secPrint(int); //(int *, int);
+void secPrint(int);
 void endSimulation();
 
     /* Handler */
@@ -78,7 +78,7 @@ void check_in() {
     }
     fclose(file_descriptor);
 
-    /*qui posso usare exit(-1) perchè non ho ancora allocato memorie, sh, semafori etc quando la chiamo */
+    /* Posso usare exit(-1) perchè non ho ancora allocato shm e semafori etc quando la chiamo */
     if (ENERGY_DEMAND < 0){
         printf("ERRORE: IL NUMERO DI ENERGY_DEMAND DEVE ESSERE MAGGIORE DI 0\n");
         exit(-1);
@@ -100,7 +100,7 @@ void check_in() {
         exit(-1);
     }
     else if (STEP_ALIMENTAZIONE < 0){
-        printf("ERRORE: LO STEP ALIMENTAZIONE NON PUO' ASSUMERE QUESTO VALORE\n");
+        printf("ERRORE: LO STEP ALIMENTAZIONE NON PUO' ASSUMERE QUESTO VALOREn");
         exit(-1);
     }
     else if (N_NUOVI_ATOMI < 0){
@@ -118,7 +118,7 @@ void check_in() {
 }
 
     /* Esegue la print ogni secondo */
-void secPrint(int sec) { ///(int *shm_stat, int sec) {
+void secPrint(int sec) {
     printf("\033[0;33m");
     printf("AL SECONDO\t->\t[%d]\n", sec);
     printf("\033[0m");
@@ -145,14 +145,18 @@ void secPrint(int sec) { ///(int *shm_stat, int sec) {
 }
 
 /* Invio un SIGABRT a tutti i processi indicandogli di terminare */
-void endSimulation(){
-    if (shm_stat[12] != -1) //prima invio segnale ad alimentazione
-        kill(shm_stat[12], SIGABRT); 
-
-    if (shm_stat[11] != -1)
-        kill(shm_stat[11], SIGABRT);
-        
+void endSimulation() {
+    if (shm_stat[12] != -1) {
+         printf("AMMAZZO ALIMENTATORE \n");
+        kill(shm_stat[12], SIGABRT);
+    }
     
+    if (shm_stat[11] != -1) {
+        printf("AMMAZZO ATTIVATORE \n");
+        kill(shm_stat[11], SIGABRT);
+    }
+
+    while(wait(NULL) != -1); /*SERVE CREDO MA CONTROLLA???????????*/
 
     /* Memoria condivisa */
     shmdt(shm_stat);
@@ -161,14 +165,9 @@ void endSimulation(){
     /* Semafori */
     semctl(sem_init, 0, IPC_RMID);
     semctl(sem_writeShm, 0, IPC_RMID);
-   // semctl(sem_att, 0, IPC_RMID);
-
-    // exit(0);
 }
 
 int main(int argc, char *argv[]) {
-    int t = 0; /* indice dei secondi che passano */
-
     struct timespec req;
     srand(time(NULL));
 
@@ -210,16 +209,10 @@ int main(int argc, char *argv[]) {
 
     sem_init = semget(getpid() + 1, 1, 0600 | IPC_CREAT);
     sem_setval(sem_init, 0, (N_ATOMI_INIT + 2));
-    //int valuePreSim = ; /*Per effettuare controlli su sem_init*/
 
     sem_writeShm = semget(getpid() + 2, 1, 0600 | IPC_CREAT);
     sem_setval(sem_writeShm, 0, 1);
-    /* sem_att = semget(getpid() + 3, 1, 0600 | IPC_CREAT);
-    sem_setval(sem_att, 0, 1);
-*/
-    /* MESSAGE QUEUE */ 
-	//msqid = msgget(getpid() + 1, IPC_CREAT | 0600); // CODA TRA ATTIVATORE E ATOMO PER SCISSIONE
-   
+    
     /* array di stringhe, terminanti con NULL, da passare in execve() */
     char sprintf_buffer[100];
     char *args_atomi[] = {"atomo.c", NULL};
@@ -243,7 +236,6 @@ int main(int argc, char *argv[]) {
             sprintf(sprintf_buffer, "%d", num_atomico);
 		    args_atomi[2] = strdup (sprintf_buffer);
 
-            // printf("VEDIAMO ARGS_ATOMI: %d %d\n", atoi(args_atomi[1]), atoi(args_atomi[2]));
             execve(ato, args_atomi, NULL);
             exit(0);
             break;
@@ -251,11 +243,11 @@ int main(int argc, char *argv[]) {
             break;
         }
     }
-    while (semctl(sem_init, 0, GETVAL) != 2);
-    //printf("%d", semctl(sem_init, 0, GETVAL));
+    /* Attendiamo che tutti gli atomi siano pronti, visto che serviranno ad attivatore*/
+    while (semctl(sem_init, 0, GETVAL) > 2); /*DA LASCIARE O SI FOTTE TUTTO*/
     printf("TUTTI GLI ATOMI INIZIALI SONO PRONTI\n");
 
- /* Generazione processo ATTIVATORE */
+    /* Generazione processo ATTIVATORE */
     switch (fork()) {
     case -1:
         printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEL PROCESSO ATTIVATORE\n");
@@ -269,10 +261,9 @@ int main(int argc, char *argv[]) {
     default:
         break;
     }
-    while (semctl(sem_init, 0, GETVAL) != 1);
+    //while (semctl(sem_init, 0, GETVAL) > 1);
     printf("IL PROCESSO ATTIVATORE E' PRONTO\n");
 
-    
     /* Generazione processo ALIMENTAZIONE */
     switch (fork()) {
     case -1:
@@ -288,7 +279,9 @@ int main(int argc, char *argv[]) {
         break;
     }
     printf("IL PROCESSO ALIMENTAZIONE E' PRONTO\n");
-//printf("%d", semctl(sem_init, 0, GETVAL));
+    //printf("%d", semctl(sem_init, 0, GETVAL));
+
+    int t = 0; /* indice dei secondi che passano */
 
     /* Aspetto fin quando non sono stati creati tutti i processi */
     while (semctl(sem_init, 0, GETVAL) != 0);
@@ -299,8 +292,6 @@ int main(int argc, char *argv[]) {
         req.tv_sec = 1;
         req.tv_nsec = 0;
         nanosleep(&req, NULL);
-        //while (semctl(sem_att, 0, GETVAL) == 1);
-        //while(semctl(sem_writeShm, 0, GETVAL) == 1);
         
     /* Prelievo dell'ENERGY DEMAND */
         sem_reserve(sem_writeShm, 0);
@@ -311,16 +302,14 @@ int main(int argc, char *argv[]) {
         if (shm_stat[10] > ENERGY_EXPLODE_THRESHOLD) {
             printf("EXPLODE: L\'ENERGIA LIBERATA E\' MAGGIORE DEL THRESHOLD\n");
             kill(getpid(), SIGABRT);
-            
-        } else if (shm_stat[10] < 0) {
+        } else if (shm_stat[10] < 0) { // non sarebbe meglio < energy demand?
             printf("BLACKOUT: L\'ENERGIA CHE SI VUOLE PRELEVARE NON E\' DISPONIBILE\n");
             kill(getpid(), SIGABRT);
-           
         }
 
         t++;
         secPrint(t);
-        
+
     /* Poi azzero le statistiche relative all'ultimo secondo _sec */
         shm_stat[1] = 0;
         shm_stat[3] = 0;
@@ -328,14 +317,12 @@ int main(int argc, char *argv[]) {
         shm_stat[7] = 0;
         shm_stat[9] = 0;
         sem_release(sem_writeShm, 0);
-       //sem_release(sem_att, 0); 
-       
     }
     printf("IL TEMPO DI SIMULATIONE IMPOSTATO E' TERMINATO\n");
 
     endSimulation();
 
-    while (wait(NULL) != -1); /*SERVE CREDO MA CONTROLLA???????????*/
+    while(wait(NULL) != -1); /*SERVE CREDO MA CONTROLLA???????????*/
 
     printf("SIMULAZIONE TERMINATA CON SUCCESSO\n");
     return 0;

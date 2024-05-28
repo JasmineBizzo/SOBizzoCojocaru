@@ -75,16 +75,11 @@ const char *file_path = "../src/input.txt";
 }
 
 void endLocal(){
-	/* Memoria condivisa 
-	shmdt(shm_stat);
-	shmctl(stat_id, IPC_RMID, NULL);*/
-
 	/* Semafori */
 	semctl(sem_init, 0, IPC_RMID);
 
 	printf("ALIMENTAZIONE MUORE \n");
 	exit(0);
-	
 }
 
 int main(int argc, char * argv[]) {
@@ -94,16 +89,12 @@ int main(int argc, char * argv[]) {
 	struct sigaction sa;
 	bzero(&sa, sizeof(sa));
 	sa.sa_handler = handle_signal;
-	sigaction(SIGABRT, &sa, NULL);
-	
-	/*stat_id = shmget(getppid() + 1, sizeof(int) * 13, 0600 | IPC_CREAT);
-	shm_stat = shmat(stat_id, NULL, 0); */									
+	sigaction(SIGABRT, &sa, NULL);								
+
+    read_in();
 
 	sem_init = semget(getppid() + 1, 1, 0600 | IPC_CREAT);
 	sem_reserve(sem_init, 0);
-
-	read_in();
-	//while(semctl(sem_init, 0, GETVAL) != (N_ATOMI_INIT + 2));
 		
 	char ato[] = {"../src/atomo"};
 	char * args_atomi[]  = {"atomo.c", NULL};
@@ -111,7 +102,7 @@ int main(int argc, char * argv[]) {
 	int pid_master = getppid();
 
 	while(!end_flag){
-		req.tv_sec = 0;
+        req.tv_sec = 0;
         req.tv_nsec = STEP_ALIMENTAZIONE;
         nanosleep(&req, NULL);
 		
@@ -119,10 +110,10 @@ int main(int argc, char * argv[]) {
 			int num_atomico = rand()%N_ATOM_MAX+1;
 			switch (fork()) {
     			case -1:
-        			printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI IN ALIMENTAZIONE\n");
-            		kill(getppid(), SIGABRT);
+                    printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI IN ALIMENTAZIONE\n");
+                    kill(getppid(), SIGABRT);
         		case 0:
-					sprintf(sprintf_buffer, "%d", pid_master);
+                    sprintf(sprintf_buffer, "%d", pid_master);
            			args_atomi[1] = strdup (sprintf_buffer);
            			sprintf(sprintf_buffer, "%d", num_atomico);
 		    		args_atomi[2] = strdup (sprintf_buffer);
@@ -133,7 +124,6 @@ int main(int argc, char * argv[]) {
         	default:
         	break;
         	}
-			//printf("\n DOPO SEGNALE IL PROCESSO alimentazione CONTINUA 2 \n");
-    	}
+		}
 	}
 }
