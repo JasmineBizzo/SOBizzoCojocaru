@@ -5,7 +5,9 @@ int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-int stat_id, sem_init, sem_writeShm, pid_attivatore, pid_alimentazione, energy_avaliable;
+int stat_id, sem_init, sem_writeShm, pid_attivatore, pid_alimentazione;
+int generata_sec, usata_sec, scorie_sec, scissioni_sec, attivazioni_sec, energy_avaliable;
+int generata_tot = 0, usata_tot = 0, scorie_tot = 0, scissioni_tot = 0, attivazioni_tot = 0;
 int *shm_stat;
 
 void check_in();
@@ -116,25 +118,24 @@ void check_in() {
 
     /* Esegue la print ogni secondo */
 void secPrint(int sec) {
-    printf("\033[0;33m");
+  printf("\033[0;33m");
     printf("\nDURANTE IL SECONDO -> [%d]\n", sec);
     printf("\033[0m");
     printf("\n");
-    printf("LE ATTIVAZIONI NELL\'ULTIMO SECONDO SONO STATE -> [\033[1;32m%d\033[0m]\n", shm_stat[9]);
-    printf("LE ATTIVAZIONI TOTALI SONO STATE -> [\033[1;32m%d\033[0m]\n", shm_stat[8]);
+    printf("LE ATTIVAZIONI NELL\'ULTIMO SECONDO SONO STATE -> [\033[1;32m%d\033[0m]\n", attivazioni_sec);
+    printf("LE ATTIVAZIONI TOTALI SONO STATE -> [\033[1;32m%d\033[0m]\n", attivazioni_tot);
     printf("\n");
-    printf("LE SCISSIONI NELL\'ULTIMO SECONDO SONO STATE -> [\033[1;32m%d\033[0m]\n", shm_stat[7]);
-    printf("LE SCISSIONI TOTALI SONO STATE -> [\033[1;32m%d\033[0m]\n", shm_stat[6]);
+    printf("LE SCISSIONI NELL\'ULTIMO SECONDO SONO STATE -> [\033[1;32m%d\033[0m]\n", scissioni_sec);
+    printf("LE SCISSIONI TOTALI SONO STATE -> [\033[1;32m%d\033[0m]\n", scissioni_tot);
     printf("\n");
-    printf("L\'ENERGIA PRODOTTA NELL\'ULTIMO SECONDO E\' STATA -> [\033[1;32m%d\033[0m]\n", shm_stat[1]);
-    printf("L\'ENERGIA PRODOTTA TOTALE E\' -> [\033[1;32m%d\033[0m]\n", shm_stat[0]);
-    printf("L\'ENERGIA DISPONIBILE PER IL PROSSIMO PRELIEVO E\' -> [\033[1;32m%d\033[0m]\n", energy_avaliable);
+    printf("L\'ENERGIA PRODOTTA NELL\'ULTIMO SECONDO E\' STATA -> [\033[1;32m%d\033[0m]\n", generata_sec);
+    printf("L\'ENERGIA PRODOTTA TOTALE E\' -> [\033[1;32m%d\033[0m]\n", generata_tot);
     printf("\n");
-    printf("L\'ENERGIA CONSUMATA NELL\'ULTIMO SECONDO E\' STATA -> [\033[1;32m%d\033[0m]\n", shm_stat[3]);
-    printf("L\'ENERGIA CONSUMATA TOTALE E\' t-> [\033[1;32m%d\033[0m]\n", shm_stat[2]);
+    printf("L\'ENERGIA CONSUMATA NELL\'ULTIMO SECONDO E\' STATA -> [\033[1;32m%d\033[0m]\n", usata_sec);
+    printf("L\'ENERGIA CONSUMATA TOTALE E\' t-> [\033[1;32m%d\033[0m]\n", usata_tot);
     printf("\n");
-    printf("LE SCORIE PRODOTTE NELL\'ULTIMO SECONDO SONO STATE -> [\033[1;32m%d\033[0m]\n", shm_stat[5]);
-    printf("LE SCORIE PRODOTTE TOTALI SONO STATE -> [\033[1;32m%d\033[0m]\n", shm_stat[4]);
+    printf("LE SCORIE PRODOTTE NELL\'ULTIMO SECONDO SONO STATE -> [\033[1;32m%d\033[0m]\n", scorie_sec);
+    printf("LE SCORIE PRODOTTE TOTALI SONO STATE -> [\033[1;32m%d\033[0m]\n", scorie_tot);
     printf("\033[0;33m");
     printf("--------------------------------------------------------------------------------\n");
     printf("\033[0m");
@@ -147,10 +148,10 @@ printf("\nABORT ALIMENTATORE %d\n", pid_alimentazione);
         kill(pid_alimentazione, SIGABRT);
     }
 
-    if (shm_stat[10] != -1){
-    printf("\nABORT ATTIVATORE %d\n", shm_stat[10]);
-        kill(shm_stat[10], SIGABRT);
-        sem_release(sem_writeShm, 0); /***PROVA*/
+    if (pid_attivatore != -1){
+    printf("\nABORT ATTIVATORE %d\n", pid_attivatore);
+        kill(pid_attivatore, SIGABRT);
+    sem_release(sem_writeShm, 0); /***PROVA*/
     }
 
     while(wait(NULL) != -1);
@@ -178,7 +179,15 @@ int main(int argc, char *argv[]) {
     /**
      * SHARED MEMORY
      * Pid master + 1: array dei dati necessari per la stampa + pid di attivatore
-     *
+     *  
+     * shm_stat[0] = pid dell'attivatore
+     * shm_stat[1] = attivazioni totali
+     * shm_stat[2] = scissioni totali
+     * shm_stat[3] = energia generata totale
+     * shm_stat[4] = energia consumata totale
+     * shm_stat[5] = scorie totali
+     * 
+     * ORA LA SHM RIMANE solo CON I VALORI TOTALI, IL MASTER OGNI SECONDO CALCOLA QUELLI _sec
      * shm_stat[0] = int energy; non tiene conto dei prelievi del master
      * shm_stat[1] = int energy_sec;
      * shm_stat[2] = int energy_used;
@@ -190,8 +199,9 @@ int main(int argc, char *argv[]) {
      * shm_stat[8] = int num_attivazioni;
      * shm_stat[9] = int num_attivazioni_sec;
      * shm_stat[10] = pid dell'attivatore
+     * 
     */
-    stat_id = shmget(getpid() + 1, sizeof(int) * 11, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
+    stat_id = shmget(getpid() + 1, sizeof(int) * 6, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
     shm_stat = shmat(stat_id, NULL, 0); /*collega l'area a un puntatore*/
    
     /**
@@ -253,9 +263,9 @@ int main(int argc, char *argv[]) {
     default:
         break;
     }
-    shm_stat[10] = pid_attivatore; /* Prima non salvava i pid di attivatore e alim in shm*/
+    shm_stat[0] = pid_attivatore; /* Prima non salvava i pid di attivatore e alim in shm*/
     printf("IL PROCESSO ATTIVATORE E' PRONTO\n");
-//printf("\n shm_10 %d \n", shm_stat[10]);
+printf("\n shm_10 %d \n", shm_stat[0]);
 
     /* Generazione processo ALIMENTAZIONE */
     switch (pid_alimentazione = fork()) {
@@ -271,7 +281,7 @@ int main(int argc, char *argv[]) {
         break;
     }
     printf("IL PROCESSO ALIMENTAZIONE E' PRONTO\n");
-   // printf("\n ALIM %d\n", pid_alimentazione);
+   printf("\n ALIM %d\n", pid_alimentazione);
 
     int t = 0; /* indice dei secondi che passano */
 
@@ -284,8 +294,29 @@ int main(int argc, char *argv[]) {
         req.tv_sec = 1;
         req.tv_nsec = 0;
         nanosleep(&req, NULL);
+
+        sem_reserve(sem_writeShm, 0);
+        attivazioni_sec = shm_stat[1] - attivazioni_tot;
+        scissioni_sec = shm_stat[2] - scissioni_tot;
+        generata_sec = shm_stat[3] - generata_tot;
+        usata_sec = shm_stat[4] - usata_tot;
+        scorie_sec = shm_stat[5] - scorie_tot;
+
+        attivazioni_tot = shm_stat[1];  
+        scissioni_tot = shm_stat[2];
+        generata_tot = shm_stat[3];
+        usata_tot = shm_stat[4];
+        scorie_tot = shm_stat[5];
+        sem_release(sem_writeShm, 0);
+
+        t++;
+        secPrint(t);
         
-        energy_avaliable = shm_stat[0] - shm_stat[2];
+        sem_reserve(sem_writeShm, 0);
+        shm_stat[4] = shm_stat[4] + ENERGY_DEMAND; /* aumento l'energia consumata */
+        energy_avaliable = shm_stat[3] - shm_stat[4];
+        sem_release(sem_writeShm, 0);
+
         if (energy_avaliable > ENERGY_EXPLODE_THRESHOLD) {
             printf("EXPLODE: L\'ENERGIA LIBERATA E\' MAGGIORE DEL THRESHOLD\n");
             kill(getpid(), SIGABRT);
@@ -294,20 +325,13 @@ int main(int argc, char *argv[]) {
             kill(getpid(), SIGABRT);
         }
 
-        sem_reserve(sem_writeShm, 0);
-        shm_stat[2] = shm_stat[2] + ENERGY_DEMAND;
-        shm_stat[3] = shm_stat[3] + ENERGY_DEMAND;
-        
-        t++;
-        secPrint(t);
-
-    /* Poi azzero le statistiche relative all'ultimo secondo _sec */
+    /* Poi azzero le statistiche relative all'ultimo secondo _sec 
         shm_stat[1] = 0;
         shm_stat[3] = 0;
         shm_stat[5] = 0;
         shm_stat[7] = 0;
-        shm_stat[9] = 0;
-        sem_release(sem_writeShm, 0);
+        shm_stat[9] = 0;*/
+       
     }
     printf("IL TEMPO DI SIMULATIONE IMPOSTATO E' TERMINATO\n");
 

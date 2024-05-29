@@ -91,15 +91,15 @@ void scissione() {
 	/* Controllo non si crei una SCORIA, se il num atomico è troppo basso termino il processo */
 	if (my_num_atom <= MIN_N_ATOMICO){
 		sem_reserve(sem_writeShm, 0);
-		shm_stat[4] = shm_stat[4] + 1; /* aumento il contatore delle scorie */
-		shm_stat[5] = shm_stat[5] + 1;	
+		shm_stat[5] = shm_stat[5] + 1;	/* aumento le scorie */
+		//shm_stat[4] = shm_stat[4] + 1;
 		sem_release(sem_writeShm, 0);
 
-		my_msg_scorie.mpid = getpid();
-		my_msg_scorie.mpid = 1;
+		my_msg_scorie.mtype = 1;
+		my_msg_scorie.mpid = getpid();	
 		msgsnd(msqid_scorie, &my_msg_scorie, sizeof(my_msg_scorie.mpid), 0);
 
-		kill(shm_stat[10], SIGUSR1);
+		kill(shm_stat[0], SIGUSR1);
 		kill(getpid(), SIGABRT);
 	}
 
@@ -131,14 +131,14 @@ void scissione() {
 	} 	
 	int energy_created = (my_num_atom * num_atomico_child) - num_atomico_child;
 
-	/* Incremento i counter nella shm */
 	sem_reserve(sem_writeShm, 0);
-	shm_stat[0] = shm_stat[0] + energy_created; /* aumento il contatore dell'energia */
-	shm_stat[1] = shm_stat[1] + energy_created;
-	shm_stat[6] = shm_stat[6] + 1; /* aumento il contatore delle scissioni */
-	shm_stat[7] = shm_stat[7] + 1;	
+	shm_stat[3] = shm_stat[3] + energy_created; /* aumento l'energia generata */
+	//shm_stat[1] = shm_stat[1] + energy_created;
+	shm_stat[2] = shm_stat[2] + 1; /* aumento le scissioni */
+	//shm_stat[7] = shm_stat[7] + 1;	
 	sem_release(sem_writeShm, 0);
 	
+printf("QUI ATOMO + ENERGIA\n");	
 	sigemptyset(&maskBlock);
 	sigaddset(&maskBlock, SIGUSR1);
 	sigprocmask(SIG_UNBLOCK, &maskBlock, NULL);
@@ -174,7 +174,7 @@ int main(int argc, char * argv[]) {
 	sigaction(SIGABRT, &sa, NULL);
 	sigaction(SIGUSR1, &sa, NULL);
 
-	stat_id = shmget(pid_master + 1, sizeof(int) * 11, 0600 | IPC_CREAT);
+	stat_id = shmget(pid_master + 1, sizeof(int) * 6, 0600 | IPC_CREAT);
 	shm_stat = shmat(stat_id, NULL, 0);	
  
  	sem_init = semget(pid_master + 1, 1, 0600 | IPC_CREAT);
