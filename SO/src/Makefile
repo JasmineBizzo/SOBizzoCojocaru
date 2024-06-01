@@ -1,18 +1,41 @@
-master: master.c
-	gcc -std=c89 -Wpedantic ./src/master.c ./lib/ipc.o -o ./src/master
+CC = gcc
+#flags per la compilazione
+CFLAGS = -std=c89 -Wpedantic
+# target, ovvero nome dell'eseguibile che si intende produrre
+TARGET = master
+DEPS = utils.h ../lib/ipc.h
+#object file necessari per produrre l'eseguibile
+OBJ = master.o attivatore.o alimentazione.o atomo.o ../lib/ipc.o
 
-atomo: atomo.c
-	gcc -std=c89 -Wpedantic ./src/atomo.c ./lib/ipc.o -o ./src/atomo
+# si sfrutta la regola implicita per la produzione dei file oggetto n OBJ
+#all: master alimentazione atomo attivatore
 
-attivatore: attivatore.c
-	gcc -std=c89 -Wpedantic ./src/attivatore.c ./lib/ipc.o -o ./src/attivatore
+# per produrre l'eseguibile "master" servono i file object
+# master.o attivatore.o alimentazione.o atomo.o
+#$(TARGET): $(OBJ)
+#	$(CC) $(OBJ) $(CFLAGS) -o $(TARGET)
 
-alimentazione: alimentazione.c
-	gcc -std=c89 -Wpedantic ./src/alimentazione.c ./lib/ipc.o -o ./src/alimentazione
+%.o: %.c $(DEPS)
+		$(CC) $(CFLAGS) -c -o $@ $<
 
-	
-all: ./SO/src/master.c
-	gcc -std=c89 -Wpedantic ./src/master.c ./lib/ipc.o -o ./src/master
-	gcc -std=c89 -Wpedantic ./src/atomo.c ./lib/ipc.o -o ./src/atomo
-	gcc -std=c89 -Wpedantic ./src/attivatore.c ./lib/ipc.o -o ./src/attivatore
-	gcc -std=c89 -Wpedantic ./src/alimentazione.c ./lib/ipc.o -o ./src/alimentazione
+$(TARGET): $(OBJ)
+		$(CC) $(CFLAGS) -o $@ $<
+
+#master: master.c utils.h
+#	$(CC) $(CFLAGS) $^ -o $@
+
+#attivatore: attivatore.c utils.h
+#	$(CC) $(CFLAGS) $^ -o $@
+
+#alimentazione: alimentazione.c utils.h
+#	$(CC) $(CFLAGS) $^ -o $@
+
+#atomo: atomo.c utils.h
+#	$(CC) $(CFLAGS) $^ -o $@
+
+
+run: $(TARGET)
+	./$(TARGET)
+
+clean:
+	rm -f *.o $(TARGET) *~
