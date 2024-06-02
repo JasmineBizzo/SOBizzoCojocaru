@@ -1,12 +1,12 @@
 #include "utils.h"
-#include "../lib/ipc.c"
+#include "../lib/ipc.h"
 
 int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-int * shm_stat;
-int stat_id, msqid, msqid_scorie, pid_master, my_num_atom, sem_init, sem_writeShm; 
+int * shm_stat , * shm_atoms;
+int stat_id, msqid, msqid_scorie, pid_master, my_num_atom, sem_init, sem_writeShm, atoms_id; 
 int end_flag = 0;
 struct msgbuff my_msg, my_msg_scorie;
 
@@ -100,7 +100,7 @@ void scissione() {
 		msgsnd(msqid_scorie, &my_msg_scorie, sizeof(my_msg_scorie.mpid), 0);
 
 		kill(shm_stat[0], SIGUSR1);
-		kill(getpid(), SIGABRT);
+		endLocal();
 	}
 
 	/* Calcolo del num atomico al figlio */
@@ -113,32 +113,40 @@ void scissione() {
 		num_atomico_child = my_num_atom + 1;
 	}
 
+	
+
 	/* Creo il figlio della scissione */
 	char sprintf_buffer[100];
 	char * args_atomi[]  = {"atomo.c", NULL};
 	char ato[] = {"../src/atomo"};
-	if (fork() == -1) {
-		printf("MELTDOWN: ERRORE NELLA FORK PER LA SCISSIONE DEGLI ATOMI \n");
+	switch (fork()) {
+    case -1:
+        printf("MELTDOWN: ERRORE NELLA FORK PER LA SCISSIONE DEGLI ATOMI \n");
 		kill(pid_master, SIGABRT);
-	} else if (fork() == 0) {
-		sprintf(sprintf_buffer, "%d", pid_master);
+        break;
+    case 0: 
+        sprintf(sprintf_buffer, "%d", pid_master);
 		args_atomi[1] = strdup (sprintf_buffer);
 		sprintf(sprintf_buffer, "%d", num_atomico_child);
 		args_atomi[2] = strdup (sprintf_buffer);
 
       	execve(ato, args_atomi, NULL);
      	exit(0);
-	} 	
+        break;
+    default:
+        break;
+    }
+
 	int energy_created = (my_num_atom * num_atomico_child) - num_atomico_child;
 
 	sem_reserve(sem_writeShm, 0);
 	shm_stat[3] = shm_stat[3] + energy_created; /* aumento l'energia generata */
-	//shm_stat[1] = shm_stat[1] + energy_created;
+	//shm_stat[1] = shm_stat[1] + energy_created;	
 	shm_stat[2] = shm_stat[2] + 1; /* aumento le scissioni */
 	//shm_stat[7] = shm_stat[7] + 1;	
 	sem_release(sem_writeShm, 0);
 	
-printf("QUI ATOMO + ENERGIA\n");	
+	
 	sigemptyset(&maskBlock);
 	sigaddset(&maskBlock, SIGUSR1);
 	sigprocmask(SIG_UNBLOCK, &maskBlock, NULL);
@@ -146,19 +154,24 @@ printf("QUI ATOMO + ENERGIA\n");
 }
 	
 void endLocal(){ 
+	*shm_atoms -= 1;
 	/* Memoria condivisa */
 	shmdt(shm_stat);
-	shmctl(stat_id, IPC_RMID, NULL);
+	shmdt(shm_atoms);
+	//shmctl(stat_id, IPC_RMID, NULL);
 
 	/* Semafori */
 	semctl(sem_init, 0, IPC_RMID);
 	semctl(sem_writeShm, 0, IPC_RMID);
+	
 
 	/* Coda di messaggi */
 	msgctl(msqid, IPC_RMID, NULL);
 	msgctl(msqid_scorie, IPC_RMID, NULL);
 
-	//printf("ATOMO MUORE \n");
+	//printf("ATOMO MUORE \n"); 
+	
+	
 	exit(0);
 }
 
@@ -176,6 +189,10 @@ int main(int argc, char * argv[]) {
 
 	stat_id = shmget(pid_master + 1, sizeof(int) * 6, 0600 | IPC_CREAT);
 	shm_stat = shmat(stat_id, NULL, 0);	
+
+	atoms_id = shmget(pid_master + 2, sizeof(int), 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
+    shm_atoms = shmat(atoms_id, NULL, 0);
+	*shm_atoms += 1;
  
  	sem_init = semget(pid_master + 1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(pid_master + 2, 1, 0600 | IPC_CREAT);
@@ -188,6 +205,7 @@ int main(int argc, char * argv[]) {
 	msgsnd(msqid, &my_msg, sizeof(my_msg.mpid), 0);
 
 	read_in();
+	
 	
 	/* Solo gli atomi iniziali devono diminuire sem_init -> lascio a 2 per alim e attiv */
 	if(semctl(sem_init, 0, GETVAL) > 2)

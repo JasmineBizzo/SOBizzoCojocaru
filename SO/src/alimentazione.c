@@ -1,5 +1,5 @@
 #include "utils.h"
-#include "../lib/ipc.c"
+#include "../lib/ipc.h"
 
 int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
@@ -96,7 +96,7 @@ int main(int argc, char * argv[]) {
 	sem_init = semget(getppid() + 1, 1, 0600 | IPC_CREAT);
 	sem_reserve(sem_init, 0);
 		
-	char ato[] = {"../src/atomo"};
+	char ato[] = {"../bin/atomo"};
 	char * args_atomi[]  = {"atomo.c", NULL};
 	char sprintf_buffer[100];
 	int pid_master = getppid();
@@ -111,7 +111,8 @@ int main(int argc, char * argv[]) {
 			switch (fork()) {
     			case -1:
                     printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI IN ALIMENTAZIONE\n");
-                    kill(getppid(), SIGABRT);
+                    kill(pid_master, SIGABRT);
+                break;
         		case 0:
                     sprintf(sprintf_buffer, "%d", pid_master);
            		    args_atomi[1] = strdup (sprintf_buffer);

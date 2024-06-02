@@ -1,14 +1,14 @@
 #include "utils.h"
-#include "../lib/ipc.c"
+#include "../lib/ipc.h"
 
 int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-int stat_id, sem_init, sem_writeShm, pid_attivatore, pid_alimentazione;
+int stat_id, sem_init, sem_writeShm, pid_attivatore, pid_alimentazione, atoms_id;
 int generata_sec, usata_sec, scorie_sec, scissioni_sec, attivazioni_sec, energy_avaliable;
 int generata_tot = 0, usata_tot = 0, scorie_tot = 0, scissioni_tot = 0, attivazioni_tot = 0;
-int *shm_stat;
+int *shm_stat, * shm_atoms;
 
 void check_in();
 void secPrint(int);
@@ -144,25 +144,38 @@ void secPrint(int sec) {
 /* Invio un SIGABRT a tutti i processi indicandogli di terminare */
 void endSimulation() {
     if (pid_alimentazione != -1){
-printf("\nABORT ALIMENTATORE %d\n", pid_alimentazione);
         kill(pid_alimentazione, SIGABRT);
+        printf("\nABORT ALIMENTATORE %d\n", pid_alimentazione);
     }
 
     if (pid_attivatore != -1){
-    printf("\nABORT ATTIVATORE %d\n", pid_attivatore);
         kill(pid_attivatore, SIGABRT);
-    sem_release(sem_writeShm, 0); /***PROVA*/
+       // sem_release(sem_writeShm, 0); /***PROVA*/
+        printf("\nABORT ATTIVATORE %d\n", pid_attivatore);
     }
 
     while(wait(NULL) != -1);
+    while (*shm_atoms > 0)
+    {
+        //printf("Atomi Rimanenti %d\n", *shm_atoms);
+    }
+    
+   /* while (semctl(sem_atoms, 0, GETVAL) != 0){
+        printf("Atomi Rimanenti %d\n", semctl(sem_atoms, 0, GETVAL));
+    }*/
+
+    printf("Tutti i figli hanno terminato\n");
 
     /* Memoria condivisa */
     shmdt(shm_stat);
     shmctl(stat_id, IPC_RMID, NULL);
+    shmdt(shm_atoms);
+    shmctl(atoms_id, IPC_RMID, NULL);
 
     /* Semafori */
     semctl(sem_init, 0, IPC_RMID);
     semctl(sem_writeShm, 0, IPC_RMID);
+   // semctl(sem_atoms, 0, IPC_RMID);
 }
 
 int main(int argc, char *argv[]) {
@@ -203,6 +216,10 @@ int main(int argc, char *argv[]) {
     */
     stat_id = shmget(getpid() + 1, sizeof(int) * 6, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
     shm_stat = shmat(stat_id, NULL, 0); /*collega l'area a un puntatore*/
+
+    atoms_id = shmget(getpid() + 2, sizeof(int), 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
+    shm_atoms = shmat(atoms_id, NULL, 0);
+    *shm_atoms = 0;
    
     /**
      * SEMAFORI
@@ -215,15 +232,18 @@ int main(int argc, char *argv[]) {
 
     sem_writeShm = semget(getpid() + 2, 1, 0600 | IPC_CREAT);
     sem_setval(sem_writeShm, 0, 1);
+
+    //sem_atoms = semget(getpid() + 3, 1, 0600 | IPC_CREAT);
+    //sem_setval(sem_atoms, 0, 1);
     
     /* array di stringhe, terminanti con NULL, da passare in execve() */
     char sprintf_buffer[100];
     char *args_atomi[] = {"atomo.c", NULL};
     char *args_attivatore[] = {"attivatore.c", NULL};
     char *args_aliment[] = {"alimentazione.c", NULL};
-    char ato[] = {"../src/atomo"};
-    char att[] = {"../src/attivatore"};
-    char aliment[] = {"../src/alimentazione"};
+    char ato[] = {"../bin/atomo"};
+    char att[] = {"../bin/attivatore"};
+    char aliment[] = {"../bin/alimentazione"};
 
     /* Generazione degli ATOMI INIZIALI */
     for (int i = 0; i < N_ATOMI_INIT; i++) {
@@ -231,7 +251,7 @@ int main(int argc, char *argv[]) {
         switch (fork()) {
         case -1:
             printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEGLI ATOMI INIZIALI\n");
-            kill(getpid(), SIGABRT);
+            endSimulation();
             break;
         case 0: 
             sprintf(sprintf_buffer, "%d", getppid());
@@ -254,7 +274,7 @@ int main(int argc, char *argv[]) {
     switch (pid_attivatore = fork()) {
     case -1:
         printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEL PROCESSO ATTIVATORE\n");
-        kill(getpid(), SIGABRT);
+        endSimulation();
         break;
     case 0:
         execve(att, args_attivatore, NULL);
@@ -265,13 +285,13 @@ int main(int argc, char *argv[]) {
     }
     shm_stat[0] = pid_attivatore; /* Prima non salvava i pid di attivatore e alim in shm*/
     printf("IL PROCESSO ATTIVATORE E' PRONTO\n");
-printf("\n shm_10 %d \n", shm_stat[0]);
+    //printf("\n shm_10 %d \n", shm_stat[0]);
 
     /* Generazione processo ALIMENTAZIONE */
     switch (pid_alimentazione = fork()) {
     case -1:
         printf("MELTDOWN: ERRORE NELLA FORK PER LA CREAZIONE DEL PROCESSO ALIMENTAZIONE\n");
-        kill(getpid(), SIGABRT);
+        endSimulation();
         break;
     case 0:
         execve(aliment, args_aliment, NULL);
@@ -281,7 +301,7 @@ printf("\n shm_10 %d \n", shm_stat[0]);
         break;
     }
     printf("IL PROCESSO ALIMENTAZIONE E' PRONTO\n");
-   printf("\n ALIM %d\n", pid_alimentazione);
+   //printf("\n ALIM %d\n", pid_alimentazione);
 
     int t = 0; /* indice dei secondi che passano */
 
@@ -319,10 +339,10 @@ printf("\n shm_10 %d \n", shm_stat[0]);
 
         if (energy_avaliable > ENERGY_EXPLODE_THRESHOLD) {
             printf("EXPLODE: L\'ENERGIA LIBERATA E\' MAGGIORE DEL THRESHOLD\n");
-            kill(getpid(), SIGABRT);
+            endSimulation();
         } else if (energy_avaliable < 0) {
             printf("BLACKOUT: L\'ENERGIA CHE SI VUOLE PRELEVARE NON E\' DISPONIBILE\n");
-            kill(getpid(), SIGABRT);
+            endSimulation();
         }
 
     /* Poi azzero le statistiche relative all'ultimo secondo _sec 

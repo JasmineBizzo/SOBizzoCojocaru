@@ -1,5 +1,5 @@
 #include "utils.h"
-#include "../lib/ipc.c"
+#include "../lib/ipc.h"
 
 int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
@@ -7,9 +7,7 @@ int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
 int * pid_atomo, * shm_stat;
 int stat_id, msqid, msqid_scorie, sem_init, sem_writeShm;
-int end_flag = 0;
-int size = 100;
-int ind = 0;
+int end_flag = 0, ind = 0, size = 100;
 struct msgbuff my_msg, my_msg_scorie; 
 
 void read_in();
@@ -125,14 +123,14 @@ void add_atom() {
 	/* Sceglie atomi casuali a cui inviare il segnale di scissione */
 void choose_atom() {
 	if(ind > 0) {
-		int i = rand()%3+1; /* Ogni step attivatore si ordinano da 1 a 3 scissioni */
-		for(int l = 0; l < i; l++){	
+		//int i = rand()%3+1; /* Ogni step attivatore si ordinano da 1 a 3 scissioni */
+		//for(int l = 0; l < i; l++){	
 			sigset_t maskBlock;
 			sigemptyset(&maskBlock);
 			sigaddset(&maskBlock, SIGUSR1);
 			sigprocmask(SIG_BLOCK, &maskBlock, NULL);
 
-			int n = rand()%ind+1;
+			int n = rand()%ind;
 			sem_reserve(sem_writeShm, 0);
 			shm_stat[1] = shm_stat[1] + 1; /* aumento le attivazioni */
 		//shm_stat[9] = shm_stat[9] + 1;
@@ -142,7 +140,7 @@ void choose_atom() {
 			sigemptyset(&maskBlock);
 			sigaddset(&maskBlock, SIGUSR1);
 			sigprocmask(SIG_UNBLOCK, &maskBlock, NULL);
-		}
+		//}
 	}
 }
 
@@ -180,7 +178,7 @@ void endLocal() {
 		memset(&my_msg, 0, sizeof my_msg.mpid);
 		if(msgrcv(msqid, &my_msg, sizeof(my_msg.mpid), 0, 0) != -1) {
 			kill(my_msg.mpid, SIGABRT);
-			sem_release(sem_writeShm, 0); /***PROVA*/
+			//sem_release(sem_writeShm, 0); /***PROVA*/
 		printf("ATT 157 HO TERMINATO L'ATOMO %d\n", my_msg.mpid);
 		} else
 			i = size*10;
@@ -191,14 +189,14 @@ void endLocal() {
     for (int i = 0; i < ind; i++) {
         if(pid_atomo[i] != -1) {
             kill(pid_atomo[i], SIGABRT);
-			sem_release(sem_writeShm, 0); /***PROVA*/
-			//printf("IND %d , ATT 173 HO TERMINATO L'ATOMO %d\n",ind, pid_atomo[i]);
+			//sem_release(sem_writeShm, 0); /***PROVA*/
+			printf("IND %d , ATT 173 HO TERMINATO L'ATOMO %d\n",ind, pid_atomo[i]);
         }
     }
     
 	/* Memoria condivisa */
 	shmdt(shm_stat);
-	shmctl(stat_id, IPC_RMID, NULL);
+	//shmctl(stat_id, IPC_RMID, NULL);
 
 	/* Semafori */
 	semctl(sem_init, 0, IPC_RMID);
