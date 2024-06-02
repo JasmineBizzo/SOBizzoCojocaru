@@ -1,2 +1,2 @@
 ipc: ipc.c
-	gcc -std=c89 -Wpedantic -c ipc.c
+	gcc -Wvla -Wextra -Werror -c ipc.c
