@@ -155,10 +155,10 @@ void endSimulation() {
     }
 
     while(wait(NULL) != -1);
-    while (*shm_atoms > 0)
+   /* while (*shm_atoms > 0)
     {
         //printf("Atomi Rimanenti %d\n", *shm_atoms);
-    }
+    }*/
     
    /* while (semctl(sem_atoms, 0, GETVAL) != 0){
         printf("Atomi Rimanenti %d\n", semctl(sem_atoms, 0, GETVAL));
@@ -199,20 +199,6 @@ int main(int argc, char *argv[]) {
      * shm_stat[3] = energia generata totale
      * shm_stat[4] = energia consumata totale
      * shm_stat[5] = scorie totali
-     * 
-     * ORA LA SHM RIMANE solo CON I VALORI TOTALI, IL MASTER OGNI SECONDO CALCOLA QUELLI _sec
-     * shm_stat[0] = int energy; non tiene conto dei prelievi del master
-     * shm_stat[1] = int energy_sec;
-     * shm_stat[2] = int energy_used;
-     * shm_stat[3] = int energy_used_sec;
-     * shm_stat[4] = int scorie;
-     * shm_stat[5] = int scorie_sec;
-     * shm_stat[6] = int num_scissioni;
-     * shm_stat[7] = int num_scissioni_sec;
-     * shm_stat[8] = int num_attivazioni;
-     * shm_stat[9] = int num_attivazioni_sec;
-     * shm_stat[10] = pid dell'attivatore
-     * 
     */
     stat_id = shmget(getpid() + 1, sizeof(int) * 6, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
     shm_stat = shmat(stat_id, NULL, 0); /*collega l'area a un puntatore*/
