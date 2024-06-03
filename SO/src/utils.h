@@ -4,10 +4,10 @@
 
 #define _GNU_SOURCE
 
-#include <signal.h> /*utilizzo delle funzioni per la gestione dei segnali fra processi*/
-#include <errno.h> /*errno, variabile per indicare cosa e' andato storto*/
+#include <signal.h>
+#include <errno.h>
 #include <stdlib.h>
-#include <unistd.h> /*costanti e tipi simbolici vari e dichiara funzioni varie.*/
+#include <unistd.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdint.h> 
@@ -20,7 +20,7 @@
 #include <sys/msg.h>
 
 struct msgbuff {
-	int mtype;  /*message type*/
+	int mtype;
 	int mpid;
 } my_msg;
 
