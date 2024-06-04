@@ -6,7 +6,7 @@ int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
 int * pid_atomo, * shm_stat;
-int stat_id, msqid, msqid_scorie, sem_init, sem_writeShm;
+int stat_id, msqid, msqid_scorie, sem_init, sem_writeShm, sem_atoms;
 int end_flag = 0, ind = 0, size = 100;
 struct msgbuff my_msg, my_msg_scorie; 
 
@@ -100,18 +100,26 @@ void check_memory_size() {
 
 	/* Riceve i messaggi da msqid e salva i nuovi atomi */
 void add_atom() {
+	
+//printf("QUI 3 \n");
 	for(int i = 0; i < 100; i++){
+		//sem_reserve(sem_atoms, 0);
 		memset(&my_msg, 0, sizeof my_msg.mpid);
 		if(msgrcv(msqid, &my_msg, sizeof(my_msg.mpid), 0, 0) != -1) {
+
 			check_memory_size();
 			ind++;
 			pid_atomo[ind-1] = my_msg.mpid;
 			
 			//printf("ATT 109 HO SALVATO L'ATOMO %d\n", pid_atomo[ind-1]);
+
 		} else {
 			i = 100;
 		}
+		//sem_release(sem_atoms, 0);
 	}
+	
+	//printf("QUI 4\n");
 }
 
 	/* Sceglie atomi casuali a cui inviare il segnale di scissione */
@@ -152,23 +160,27 @@ void found_waste() {
 }
 
 void endLocal() {
-	for(int i = 0; i < size*10; i++) { 
-		memset(&my_msg, 0, sizeof my_msg.mpid);
-		if(msgrcv(msqid, &my_msg, sizeof(my_msg.mpid), 0, 0) != -1) {
-			kill(my_msg.mpid, SIGABRT);
-			//sem_release(sem_writeShm, 0); /***PROVA*/
-		printf("ATT 157 HO TERMINATO L'ATOMO %d\n", my_msg.mpid);
-		} else
-			i = size*10;
-	}
-
     for (int i = 0; i < ind; i++) {
         if(pid_atomo[i] != -1) {
             kill(pid_atomo[i], SIGABRT);
 			//sem_release(sem_writeShm, 0); /***PROVA*/
-			printf("IND %d , ATT 173 HO TERMINATO L'ATOMO %d\n",ind, pid_atomo[i]);
+			//printf("IND %d , ATT 173 HO TERMINATO L'ATOMO %d\n",ind, pid_atomo[i]);
         }
     }
+
+	//sem_reserve(sem_atoms, 0);
+	for(int i = 0; i < size*10; i++) { 
+		sem_release(sem_writeShm, 0); /***PROVA*/
+		sem_release(sem_atoms, 0); /**PROVA*/
+
+		memset(&my_msg, 0, sizeof my_msg.mpid);
+		if(msgrcv(msqid, &my_msg, sizeof(my_msg.mpid), 0, 0) != -1) {
+			kill(my_msg.mpid, SIGABRT);
+			
+		//printf("ATT 157 HO TERMINATO L'ATOMO %d\n", my_msg.mpid);
+		} else
+			i = size*10;
+	}
     
 	/* Memoria condivisa */
 	shmdt(shm_stat);
@@ -176,6 +188,7 @@ void endLocal() {
 	/* Semafori */
 	semctl(sem_init, 0, IPC_RMID);
 	semctl(sem_writeShm, 0, IPC_RMID);
+	semctl(sem_atoms, 0, IPC_RMID);
 
 	/* Coda di messaggi */
 	msgctl(msqid, IPC_RMID, NULL);
@@ -204,6 +217,10 @@ int main(int argc, char argv[]) {
 
 	sem_init = semget(getppid() + 1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(getppid() + 2, 1, 0600 | IPC_CREAT);
+
+
+sem_atoms = semget(getppid() + 3, 1, 0600 | IPC_CREAT);
+
 
 	msqid = msgget(getppid() + 1, IPC_CREAT | 0600);
 	msqid_scorie = msgget(getppid() + 2, IPC_CREAT | 0600);

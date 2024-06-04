@@ -5,10 +5,10 @@ int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-int stat_id, sem_init, sem_writeShm, pid_attivatore, pid_alimentazione;//, atoms_id;
+int stat_id, sem_init, sem_writeShm, pid_attivatore, pid_alimentazione, sem_atoms, atoms_id;
 int generata_sec, usata_sec, scorie_sec, scissioni_sec, attivazioni_sec, energy_avaliable;
 int generata_tot = 0, usata_tot = 0, scorie_tot = 0, scissioni_tot = 0, attivazioni_tot = 0;
-int *shm_stat; //, * shm_atoms;
+int *shm_stat, * shm_atoms;
 
 void check_in();
 void secPrint(int);
@@ -136,7 +136,7 @@ void secPrint(int sec) {
     printf("LE SCORIE PRODOTTE NELL\'ULTIMO SECONDO SONO STATE -> [\033[1;32m%d\033[0m]\n", scorie_sec);
     printf("LE SCORIE PRODOTTE TOTALI SONO STATE -> [\033[1;32m%d\033[0m]\n", scorie_tot);
     printf("\033[0;33m");
-    printf("--------------------------------------------------------------------------------\n");
+    printf("-------------------------------------------------------------------------------\n");
     printf("\033[0m");
 }
 
@@ -153,11 +153,11 @@ void endSimulation() {
         printf("\nABORT ATTIVATORE %d\n", pid_attivatore);
     }
 
-   /* while(wait(NULL) != -1);
+   //while(wait(NULL) != -1);
     while (*shm_atoms > 0)
     {
         printf("Atomi Rimanenti %d\n", *shm_atoms);
-    }*/
+    }
 
     /* Memoria condivisa */
     shmdt(shm_stat);
@@ -168,6 +168,9 @@ void endSimulation() {
     /* Semafori */
     semctl(sem_init, 0, IPC_RMID);
     semctl(sem_writeShm, 0, IPC_RMID);
+    semctl(sem_atoms, 0, IPC_RMID);
+
+    semctl(sem_atoms, 0, IPC_RMID);
 
     exit(0);
 }
@@ -197,9 +200,9 @@ int main(int argc, char *argv[]) {
     stat_id = shmget(getpid() + 1, sizeof(int) * 6, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
     shm_stat = shmat(stat_id, NULL, 0); /*collega l'area a un puntatore*/
 
-   /*atoms_id = shmget(getpid() + 2, sizeof(int), 0600 | IPC_CREAT); 
+   atoms_id = shmget(getpid() + 2, sizeof(int), 0600 | IPC_CREAT); 
     shm_atoms = shmat(atoms_id, NULL, 0);
-    *shm_atoms = 0;*/
+    *shm_atoms = 0;
    
     /**
      * SEMAFORI
@@ -212,6 +215,10 @@ int main(int argc, char *argv[]) {
 
     sem_writeShm = semget(getpid() + 2, 1, 0600 | IPC_CREAT);
     sem_setval(sem_writeShm, 0, 1);
+
+sem_atoms = semget(getpid() + 3, 1, 0600 | IPC_CREAT);
+sem_setval(sem_atoms, 0, 1);
+
     
     /* array di stringhe, terminanti con NULL, da passare in execve() */
     char sprintf_buffer[100];

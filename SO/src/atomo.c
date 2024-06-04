@@ -5,8 +5,8 @@ int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
 int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
 int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
 
-int * shm_stat;//, * shm_atoms;
-int stat_id, msqid, msqid_scorie, pid_master, my_num_atom, sem_init, sem_writeShm;// atoms_id; 
+int * shm_stat, * shm_atoms;
+int stat_id, msqid, msqid_scorie, pid_master, my_num_atom, sem_init, sem_writeShm, sem_atoms, atoms_id; 
 int end_flag = 0;
 struct msgbuff my_msg, my_msg_scorie;
 
@@ -146,7 +146,7 @@ void scissione() {
 }
 	
 void endLocal(){ 
-	//*shm_atoms -= 1;
+	*shm_atoms -= 1;
 	/* Memoria condivisa */
 	shmdt(shm_stat);
 	//shmdt(shm_atoms);
@@ -154,6 +154,7 @@ void endLocal(){
 	/* Semafori */
 	semctl(sem_init, 0, IPC_RMID);
 	semctl(sem_writeShm, 0, IPC_RMID);
+	semctl(sem_atoms, 0, IPC_RMID);
 
 	/* Coda di messaggi */
 	msgctl(msqid, IPC_RMID, NULL);
@@ -178,21 +179,30 @@ int main(int argc, char * argv[]) {
 	shm_stat = shmat(stat_id, NULL, 0);	
 
 
-	/*atoms_id = shmget(pid_master + 2, sizeof(int), 0600 | IPC_CREAT); 
+
+	atoms_id = shmget(pid_master + 2, sizeof(int), 0600 | IPC_CREAT); 
     shm_atoms = shmat(atoms_id, NULL, 0);
-	*shm_atoms += 1;*/
+	*shm_atoms += 1;
 
  
  	sem_init = semget(pid_master + 1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(pid_master + 2, 1, 0600 | IPC_CREAT);
 
+
+sem_atoms= semget(pid_master + 3, 1, 0600 | IPC_CREAT);
+
+
 	msqid = msgget(pid_master + 1, IPC_CREAT | 0600);
 	msqid_scorie = msgget(pid_master + 2, IPC_CREAT | 0600);
 
+sem_reserve(sem_atoms, 0);
+//printf("QUI\n");
 	my_msg.mtype = 1;
 	my_msg.mpid = getpid();
 	msgsnd(msqid, &my_msg, sizeof(my_msg.mpid), 0);
-
+	
+sem_release(sem_atoms, 0);
+//printf("QUI 2\n");
 	read_in();
 	
 	/* Solo gli atomi iniziali devono diminuire sem_init*/
