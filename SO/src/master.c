@@ -170,7 +170,7 @@ void endSimulation() {
     semctl(sem_writeShm, 0, IPC_RMID);
     semctl(sem_atoms, 0, IPC_RMID);
 
-    exit(0);
+    exit(0); //MEGLIO return 0; ???
 }
 
 int main(int argc, char *argv[]) {
