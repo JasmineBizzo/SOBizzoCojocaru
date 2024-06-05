@@ -170,8 +170,6 @@ void endSimulation() {
     semctl(sem_writeShm, 0, IPC_RMID);
     semctl(sem_atoms, 0, IPC_RMID);
 
-    semctl(sem_atoms, 0, IPC_RMID);
-
     exit(0);
 }
 
@@ -189,13 +187,6 @@ int main(int argc, char *argv[]) {
     /**
      * SHARED MEMORY
      * Pid master + 1: array dei dati necessari per la stampa + pid di attivatore
-     *  
-     * shm_stat[0] = pid dell'attivatore
-     * shm_stat[1] = attivazioni totali
-     * shm_stat[2] = scissioni totali
-     * shm_stat[3] = energia generata totale
-     * shm_stat[4] = energia consumata totale
-     * shm_stat[5] = scorie totali
     */
     stat_id = shmget(getpid() + 1, sizeof(int) * 6, 0600 | IPC_CREAT); /*creazione area di memoria condivisa */
     shm_stat = shmat(stat_id, NULL, 0); /*collega l'area a un puntatore*/
