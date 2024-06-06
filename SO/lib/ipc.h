@@ -3,7 +3,7 @@
 #define IPC
 #include <stddef.h>
 
-/*Sez Semafori*/
+/*Sezione Semafori*/
 
 union semun {
 	int              val;    /* Value for SETVAL */
@@ -17,6 +17,5 @@ int sem_setval(int sem_id, int sem_num, int sem_val);
 int sem_reserve(int sem_id, int sem_num);
 
 int sem_release(int sem_id, int sem_num);
-
 
 #endif
