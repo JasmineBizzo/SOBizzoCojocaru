@@ -1,41 +1,42 @@
 #include "utils.h"
 #include "../lib/ipc.h"
 
-int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO;
-int STEP_ATTIVATORE, STEP_ALIMENTAZIONE, N_NUOVI_ATOMI;
-int SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
-
-int * shm_stat, * shm_atoms;
-int stat_id, msqid, msqid_scorie, pid_master, my_num_atom, sem_init, sem_writeShm, sem_atoms, atoms_id; 
+int N_ATOMI_INIT, N_ATOM_MAX, MIN_N_ATOMICO, STEP_ATTIVATORE, STEP_ALIMENTAZIONE;
+int N_NUOVI_ATOMI, SIM_DURATION, ENERGY_DEMAND, ENERGY_EXPLODE_THRESHOLD;
+int stat_id, msqid, msqid_scorie, pid_master, my_num_atom, sem_init, sem_writeShm;
 int end_flag = 0;
+int * shm_stat;
 struct msgbuff my_msg, my_msg_scorie;
 
+void handle_signal(int);
 void read_in();
 void scissione();
 void endLocal();
 
 void handle_signal(int signal) {
-	switch (signal){
+	switch (signal) {
 		case SIGABRT:
 			end_flag = 1;
-		break;
+			break;
 		case SIGUSR1:
 			scissione();
-		break;
+			break;
 		default:
-		break;
+			break;
 	}
 }
 
-void read_in(){
-const char *file_path = "../src/input.txt";
+void read_in() {
+	const char *file_path = "../src/input.txt";
     char buffer[1024];
     char *token;
     FILE *file_descriptor = fopen(file_path, "r");
 
-    if (!file_descriptor) {
-        perror("Failed to open the file");
+	if (!file_descriptor) {
+        printf("FALLIMENTO NELL'APERTURA DEL FILE INPUT.\n");
+        exit(-1);
     }
+    
     while (fgets(buffer, 1024, file_descriptor)) {
         token = strtok(buffer, " ");
 
@@ -87,7 +88,7 @@ void scissione() {
 	sigprocmask(SIG_BLOCK, &maskBlock, NULL);
 
 	/* Controllo non si crei una SCORIA, se il num atomico è troppo basso termino il processo */
-	if (my_num_atom <= MIN_N_ATOMICO){
+	if (my_num_atom <= MIN_N_ATOMICO) {
 		sem_reserve(sem_writeShm, 0);
 		shm_stat[5] = shm_stat[5] + 1;	/* aumento le scorie */
 		sem_release(sem_writeShm, 0);
@@ -100,63 +101,55 @@ void scissione() {
 		endLocal();
 	}
 
-	/* Calcolo del num atomico al figlio */
+	/* Calcolo del numero atomico del figlio */
 	int num_atomico_child;	
 	if (my_num_atom % 2 == 0) { 
 		my_num_atom /= 2; 
 		num_atomico_child = my_num_atom; 	
 	} else { 
-		my_num_atom /= 2; 
+		my_num_atom /= 2;
 		num_atomico_child = my_num_atom + 1;
 	}
 
 	/* Creo il figlio della scissione */
 	char sprintf_buffer[100];
-	char * args_atomi[]  = {"atomo.c", NULL};
-	char ato[] = {"../src/atomo"};
+	char atom[] = {"../bin/atomo"};
+	char *args_atomi[]  = {"atomo.c", NULL};
 	switch (fork()) {
-    case -1:
-        printf("MELTDOWN: ERRORE NELLA FORK PER LA SCISSIONE DEGLI ATOMI \n");
-		kill(pid_master, SIGABRT);
-        break;
-    case 0: 
-        sprintf(sprintf_buffer, "%d", pid_master);
-		args_atomi[1] = strdup (sprintf_buffer);
-		sprintf(sprintf_buffer, "%d", num_atomico_child);
-		args_atomi[2] = strdup (sprintf_buffer);
+    	case -1:
+        	printf("MELTDOWN: ERRORE NELLA FORK PER LA SCISSIONE DEGLI ATOMI\n");
+			kill(pid_master, SIGABRT);
+        	break;
+    	case 0: 
+        	sprintf(sprintf_buffer, "%d", pid_master);
+			args_atomi[1] = strdup (sprintf_buffer);
+			sprintf(sprintf_buffer, "%d", num_atomico_child);
+			args_atomi[2] = strdup (sprintf_buffer);
 
-      	execve(ato, args_atomi, NULL);
-     	exit(0);
-        break;
-    default:
-        break;
+      		execve(atom, args_atomi, NULL);
+     		exit(0);
+        	break;
+    	default:
+        	break;
     }
 
 	int energy_created = (my_num_atom * num_atomico_child) - num_atomico_child;
-
 	sem_reserve(sem_writeShm, 0);
 	shm_stat[3] = shm_stat[3] + energy_created; /* aumento l'energia generata */	
 	shm_stat[2] = shm_stat[2] + 1; /* aumento le scissioni */
 	sem_release(sem_writeShm, 0);
-	
 	
 	sigemptyset(&maskBlock);
 	sigaddset(&maskBlock, SIGUSR1);
 	sigprocmask(SIG_UNBLOCK, &maskBlock, NULL);
 }
 	
-void endLocal(){ 
-	*shm_atoms -= 1;
-	/* Memoria condivisa */
+void endLocal() { 
 	shmdt(shm_stat);
-	//shmdt(shm_atoms);
-
-	/* Semafori */
+	
 	semctl(sem_init, 0, IPC_RMID);
 	semctl(sem_writeShm, 0, IPC_RMID);
-	semctl(sem_atoms, 0, IPC_RMID);
 
-	/* Coda di messaggi */
 	msgctl(msqid, IPC_RMID, NULL);
 	msgctl(msqid_scorie, IPC_RMID, NULL);
 
@@ -165,51 +158,33 @@ void endLocal(){
 
 int main(int argc, char * argv[]) {
 	pid_master = atoi(argv[1]);
-	my_num_atom = atoi(argv[2]); 
+	my_num_atom = atoi(argv[2]);
 
-	srand(time(NULL));
 	struct sigaction sa;
-
 	bzero(&sa, sizeof(sa));
 	sa.sa_handler = handle_signal; 
 	sigaction(SIGABRT, &sa, NULL);
 	sigaction(SIGUSR1, &sa, NULL);
 
+	read_in();
+
 	stat_id = shmget(pid_master + 1, sizeof(int) * 6, 0600 | IPC_CREAT);
-	shm_stat = shmat(stat_id, NULL, 0);	
-
-
-
-	atoms_id = shmget(pid_master + 2, sizeof(int), 0600 | IPC_CREAT); 
-    shm_atoms = shmat(atoms_id, NULL, 0);
-	*shm_atoms += 1;
-
+	shm_stat = shmat(stat_id, NULL, 0);
  
  	sem_init = semget(pid_master + 1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(pid_master + 2, 1, 0600 | IPC_CREAT);
 
-
-sem_atoms= semget(pid_master + 3, 1, 0600 | IPC_CREAT);
-
-
 	msqid = msgget(pid_master + 1, IPC_CREAT | 0600);
 	msqid_scorie = msgget(pid_master + 2, IPC_CREAT | 0600);
 
-sem_reserve(sem_atoms, 0);
-//printf("QUI\n");
 	my_msg.mtype = 1;
 	my_msg.mpid = getpid();
 	msgsnd(msqid, &my_msg, sizeof(my_msg.mpid), 0);
 	
-sem_release(sem_atoms, 0);
-//printf("QUI 2\n");
-	read_in();
-	
-	/* Solo gli atomi iniziali devono diminuire sem_init*/
+	/* Solo gli atomi iniziali devono diminuire sem_init */
 	if(semctl(sem_init, 0, GETVAL) > 2)
 		sem_reserve(sem_init, 0);
 	
 	while(!end_flag);
-
 	endLocal();
 }
