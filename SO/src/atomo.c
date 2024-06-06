@@ -28,56 +28,56 @@ void handle_signal(int signal) {
 
 void read_in() {
 	const char *file_path = "../src/input.txt";
-    char buffer[1024];
-    char *token;
-    FILE *file_descriptor = fopen(file_path, "r");
+	char buffer[1024];
+	char *token;
+	FILE *file_descriptor = fopen(file_path, "r");
 
 	if (!file_descriptor) {
-        printf("FALLIMENTO NELL'APERTURA DEL FILE INPUT.\n");
-        exit(-1);
-    }
-    
-    while (fgets(buffer, 1024, file_descriptor)) {
-        token = strtok(buffer, " ");
+	printf("FALLIMENTO NELL'APERTURA DEL FILE INPUT.\n");
+	exit(-1);
+	}
 
-        if (strcmp(token, "ENERGY_DEMAND") == 0){
-            token = strtok(NULL, " ");
-            ENERGY_DEMAND = atoi(token);
-        }
-        else if (strcmp(token, "N_ATOMI_INIT") == 0){
-            token = strtok(NULL, " ");
-            N_ATOMI_INIT = atoi(token);
-        }
-        else if (strcmp(token, "N_ATOM_MAX") == 0){
-            token = strtok(NULL, " ");
-            N_ATOM_MAX = atoi(token);
-        }
-        else if (strcmp(token, "MIN_N_ATOMICO") == 0){
-            token = strtok(NULL, " ");
-            MIN_N_ATOMICO = atoi(token);
-        }
-        else if (strcmp(token, "STEP_ATTIVATORE") == 0){
-            token = strtok(NULL, " ");
-            STEP_ATTIVATORE = atoi(token);
-        }
-        else if (strcmp(token, "STEP_ALIMENTAZIONE") == 0){
-            token = strtok(NULL, " ");
-            STEP_ALIMENTAZIONE = atoi(token);
-        }
-        else if (strcmp(token, "N_NUOVI_ATOMI") == 0){
-            token = strtok(NULL, " ");
-            N_NUOVI_ATOMI = atoi(token);
-        }
-        else if (strcmp(token, "SIM_DURATION") == 0){
-            token = strtok(NULL, " ");
-            SIM_DURATION = atoi(token);
-        }
-        else if (strcmp(token, "ENERGY_EXPLODE_THRESHOLD") == 0){
-            token = strtok(NULL, " ");
-            ENERGY_EXPLODE_THRESHOLD = atoi(token);
-        }
-    }
-    fclose(file_descriptor);
+	while (fgets(buffer, 1024, file_descriptor)) {
+		token = strtok(buffer, " ");
+
+		if (strcmp(token, "ENERGY_DEMAND") == 0) {
+			token = strtok(NULL, " ");
+			ENERGY_DEMAND = atoi(token);
+		}
+		else if (strcmp(token, "N_ATOMI_INIT") == 0) {
+			token = strtok(NULL, " ");
+			N_ATOMI_INIT = atoi(token);
+		}
+		else if (strcmp(token, "N_ATOM_MAX") == 0) {
+			token = strtok(NULL, " ");
+			N_ATOM_MAX = atoi(token);
+		}
+		else if (strcmp(token, "MIN_N_ATOMICO") == 0) {
+			token = strtok(NULL, " ");
+			MIN_N_ATOMICO = atoi(token);
+		}
+		else if (strcmp(token, "STEP_ATTIVATORE") == 0) {
+			token = strtok(NULL, " ");
+			STEP_ATTIVATORE = atoi(token);
+		}
+		else if (strcmp(token, "STEP_ALIMENTAZIONE") == 0) {
+			token = strtok(NULL, " ");
+			STEP_ALIMENTAZIONE = atoi(token);
+		}
+		else if (strcmp(token, "N_NUOVI_ATOMI") == 0) {
+			token = strtok(NULL, " ");
+			N_NUOVI_ATOMI = atoi(token);
+		}
+		else if (strcmp(token, "SIM_DURATION") == 0) {
+			token = strtok(NULL, " ");
+			SIM_DURATION = atoi(token);
+		}
+		else if (strcmp(token, "ENERGY_EXPLODE_THRESHOLD") == 0) {
+			token = strtok(NULL, " ");
+			ENERGY_EXPLODE_THRESHOLD = atoi(token);
+		}
+	}
+	fclose(file_descriptor);
 }
 
 /* Controllo scorie, divisione del proprio numero atomico e creazione atomo figlio */
@@ -116,22 +116,22 @@ void scissione() {
 	char atom[] = {"../bin/atomo"};
 	char *args_atomi[]  = {"atomo.c", NULL};
 	switch (fork()) {
-    	case -1:
-        	printf("MELTDOWN: ERRORE NELLA FORK PER LA SCISSIONE DEGLI ATOMI\n");
+		case -1:
+			printf("MELTDOWN: ERRORE NELLA FORK PER LA SCISSIONE DEGLI ATOMI\n");
 			kill(pid_master, SIGABRT);
-        	break;
-    	case 0: 
-        	sprintf(sprintf_buffer, "%d", pid_master);
+			break;
+		case 0: 
+			sprintf(sprintf_buffer, "%d", pid_master);
 			args_atomi[1] = strdup (sprintf_buffer);
 			sprintf(sprintf_buffer, "%d", num_atomico_child);
 			args_atomi[2] = strdup (sprintf_buffer);
-
-      		execve(atom, args_atomi, NULL);
-     		exit(0);
-        	break;
-    	default:
-        	break;
-    }
+			
+			execve(atom, args_atomi, NULL);
+			exit(0);
+			break;
+		default:
+			break;
+	}
 
 	int energy_created = (my_num_atom * num_atomico_child) - num_atomico_child;
 	sem_reserve(sem_writeShm, 0);
@@ -146,7 +146,7 @@ void scissione() {
 	
 void endLocal() { 
 	shmdt(shm_stat);
-	
+
 	semctl(sem_init, 0, IPC_RMID);
 	semctl(sem_writeShm, 0, IPC_RMID);
 
@@ -170,8 +170,8 @@ int main(int argc, char * argv[]) {
 
 	stat_id = shmget(pid_master + 1, sizeof(int) * 6, 0600 | IPC_CREAT);
 	shm_stat = shmat(stat_id, NULL, 0);
- 
- 	sem_init = semget(pid_master + 1, 1, 0600 | IPC_CREAT);
+
+	sem_init = semget(pid_master + 1, 1, 0600 | IPC_CREAT);
 	sem_writeShm = semget(pid_master + 2, 1, 0600 | IPC_CREAT);
 
 	msqid = msgget(pid_master + 1, IPC_CREAT | 0600);
@@ -180,11 +180,11 @@ int main(int argc, char * argv[]) {
 	my_msg.mtype = 1;
 	my_msg.mpid = getpid();
 	msgsnd(msqid, &my_msg, sizeof(my_msg.mpid), 0);
-	
+
 	/* Solo gli atomi iniziali devono diminuire sem_init */
 	if(semctl(sem_init, 0, GETVAL) > 2)
 		sem_reserve(sem_init, 0);
-	
+
 	while(!end_flag);
 	endLocal();
 }

@@ -31,56 +31,56 @@ void handle_signal(int signal) {
 
 void read_in() {
 	const char *file_path = "../src/input.txt";
-    char buffer[1024];
-    char *token;
-    FILE *file_descriptor = fopen(file_path, "r");
+	char buffer[1024];
+	char *token;
+	FILE *file_descriptor = fopen(file_path, "r");
 
-    if (!file_descriptor) {
-        printf("FALLIMENTO NELL'APERTURA DEL FILE INPUT.\n");
-        kill(getppid(), SIGABRT);
-    }
+	if (!file_descriptor) {
+		printf("FALLIMENTO NELL'APERTURA DEL FILE INPUT.\n");
+		kill(getppid(), SIGABRT);
+	}
 
-    while (fgets(buffer, 1024, file_descriptor)) {
-        token = strtok(buffer, " ");
+	while (fgets(buffer, 1024, file_descriptor)) {
+		token = strtok(buffer, " ");
 
-        if (strcmp(token, "ENERGY_DEMAND") == 0){
-            token = strtok(NULL, " ");
-            ENERGY_DEMAND = atoi(token);
-        }
-        else if (strcmp(token, "N_ATOMI_INIT") == 0){
-            token = strtok(NULL, " ");
-            N_ATOMI_INIT = atoi(token);
-        }
-        else if (strcmp(token, "N_ATOM_MAX") == 0){
-            token = strtok(NULL, " ");
-            N_ATOM_MAX = atoi(token);
-        }
-        else if (strcmp(token, "MIN_N_ATOMICO") == 0){
-            token = strtok(NULL, " ");
-            MIN_N_ATOMICO = atoi(token);
-        }
-        else if (strcmp(token, "STEP_ATTIVATORE") == 0){
-            token = strtok(NULL, " ");
-            STEP_ATTIVATORE = atoi(token);
-        }
-        else if (strcmp(token, "STEP_ALIMENTAZIONE") == 0){
-            token = strtok(NULL, " ");
-            STEP_ALIMENTAZIONE = atoi(token);
-        }
-        else if (strcmp(token, "N_NUOVI_ATOMI") == 0){
-            token = strtok(NULL, " ");
-            N_NUOVI_ATOMI = atoi(token);
-        }
-        else if (strcmp(token, "SIM_DURATION") == 0){
-            token = strtok(NULL, " ");
-            SIM_DURATION = atoi(token);
-        }
-        else if (strcmp(token, "ENERGY_EXPLODE_THRESHOLD") == 0){
-            token = strtok(NULL, " ");
-            ENERGY_EXPLODE_THRESHOLD = atoi(token);
-        }
-    }
-    fclose(file_descriptor);
+		if (strcmp(token, "ENERGY_DEMAND") == 0) {
+			token = strtok(NULL, " ");
+			ENERGY_DEMAND = atoi(token);
+		}
+		else if (strcmp(token, "N_ATOMI_INIT") == 0) {
+			token = strtok(NULL, " ");
+			N_ATOMI_INIT = atoi(token);
+		}
+		else if (strcmp(token, "N_ATOM_MAX") == 0) {
+			token = strtok(NULL, " ");
+			N_ATOM_MAX = atoi(token);
+		}
+		else if (strcmp(token, "MIN_N_ATOMICO") == 0) {
+			token = strtok(NULL, " ");
+			MIN_N_ATOMICO = atoi(token);
+		}
+		else if (strcmp(token, "STEP_ATTIVATORE") == 0) {
+			token = strtok(NULL, " ");
+			STEP_ATTIVATORE = atoi(token);
+		}
+		else if (strcmp(token, "STEP_ALIMENTAZIONE") == 0) {
+			token = strtok(NULL, " ");
+			STEP_ALIMENTAZIONE = atoi(token);
+		}
+		else if (strcmp(token, "N_NUOVI_ATOMI") == 0) {
+			token = strtok(NULL, " ");
+			N_NUOVI_ATOMI = atoi(token);
+		}
+		else if (strcmp(token, "SIM_DURATION") == 0) {
+			token = strtok(NULL, " ");
+			SIM_DURATION = atoi(token);
+		}
+		else if (strcmp(token, "ENERGY_EXPLODE_THRESHOLD") == 0) {
+			token = strtok(NULL, " ");
+			ENERGY_EXPLODE_THRESHOLD = atoi(token);
+		}
+	}
+	fclose(file_descriptor);
 }
 
 /* Aumenta la dimensione di pid_atomo se questo è pieno */
@@ -115,20 +115,20 @@ void add_atom() {
 /* Sceglie atomi casuali a cui inviare il segnale di scissione */
 void choose_atom() {
 	if(ind > 0) {
-			sigset_t maskBlock;
-			sigemptyset(&maskBlock);
-			sigaddset(&maskBlock, SIGUSR1);
-			sigprocmask(SIG_BLOCK, &maskBlock, NULL);
+		sigset_t maskBlock;
+		sigemptyset(&maskBlock);
+		sigaddset(&maskBlock, SIGUSR1);
+		sigprocmask(SIG_BLOCK, &maskBlock, NULL);
 
-			int n = rand()%ind;
-			sem_reserve(sem_writeShm, 0);
-			shm_stat[1] = shm_stat[1] + 1; /* aumento le attivazioni */
-			sem_release(sem_writeShm, 0);
-			kill(pid_atomo[n], SIGUSR1);
-			
-			sigemptyset(&maskBlock);
-			sigaddset(&maskBlock, SIGUSR1);
-			sigprocmask(SIG_UNBLOCK, &maskBlock, NULL);
+		int n = rand()%ind;
+		sem_reserve(sem_writeShm, 0);
+		shm_stat[1] = shm_stat[1] + 1; /* aumento le attivazioni */
+		sem_release(sem_writeShm, 0);
+		kill(pid_atomo[n], SIGUSR1);
+
+		sigemptyset(&maskBlock);
+		sigaddset(&maskBlock, SIGUSR1);
+		sigprocmask(SIG_UNBLOCK, &maskBlock, NULL);
 	}
 }
 
@@ -148,11 +148,11 @@ void found_waste() {
 }
 
 void endLocal() {
-    for (int i = 0; i < ind; i++) {
-        if(pid_atomo[i] != -1) {
-            kill(pid_atomo[i], SIGABRT);
-        }
-    }
+	for (int i = 0; i < ind; i++) {
+		if(pid_atomo[i] != -1) {
+			kill(pid_atomo[i], SIGABRT);
+		}
+	}
 
 	for(int i = 0; i < size*10; i++) {
 		memset(&my_msg, 0, sizeof my_msg.mpid);
@@ -162,7 +162,7 @@ void endLocal() {
 			i = size*10;
 		}
 	}
-    
+
 	shmdt(shm_stat);
 
 	semctl(sem_init, 0, IPC_RMID);
@@ -197,18 +197,18 @@ int main(int argc, char argv[]) {
 
 	msqid = msgget(getppid() + 1, IPC_CREAT | 0600);
 	msqid_scorie = msgget(getppid() + 2, IPC_CREAT | 0600);
-	
+
 	add_atom();
 	sem_reserve(sem_init, 0);
-	
+
 	/* Per introdurre dell'energia, poi entro nel while per ogni STEP_ATTIVATORE */
 	choose_atom();
-
+	
 	while(!end_flag) { 
 		req.tv_sec = STEP_ATTIVATORE;
-        req.tv_nsec = 0;
-        nanosleep(&req, NULL);
-		
+		req.tv_nsec = 0;
+		nanosleep(&req, NULL);
+
 		add_atom();
 		choose_atom();
 	}
