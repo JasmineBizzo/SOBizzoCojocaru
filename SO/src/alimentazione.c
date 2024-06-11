@@ -95,7 +95,7 @@ int main(int argc, char * argv[]) {
 
 	char sprintf_buffer[100];
 	char atom[] = {"../bin/atomo"};
-	char * args_atomi[]  = {"atomo.c", NULL};
+	char * args_atomi[]  = {"atomo.c", NULL, NULL, NULL};
 	int pid_master = getppid();
     
 	while(!end_flag) {
