@@ -114,7 +114,7 @@ void scissione() {
 	/* Creo il figlio della scissione */
 	char sprintf_buffer[100];
 	char atom[] = {"../bin/atomo"};
-	char *args_atomi[]  = {"atomo.c", NULL, NULL, NULL};
+	char *args_atomi[]  = {"atomo", NULL, NULL, NULL};
 	switch (fork()) {
 		case -1:
 			printf("MELTDOWN: ERRORE NELLA FORK PER LA SCISSIONE DEGLI ATOMI\n");
