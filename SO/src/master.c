@@ -195,9 +195,9 @@ int main(int argc, char *argv[]) {
 	char atom[] = {"../bin/atomo"};
 	char attiv[] = {"../bin/attivatore"};
 	char aliment[] = {"../bin/alimentazione"};
-	char *args_atomi[] = {"atomo.c", NULL};
-	char *args_attivatore[] = {"attivatore.c", NULL};
-	char *args_aliment[] = {"alimentazione.c", NULL};
+	char *args_atomi[] = {"atomo", NULL, NULL, NULL};
+	char *args_attivatore[] = {"attivatore", NULL};
+	char *args_aliment[] = {"alimentazione", NULL};
 
 	/* Generazione degli ATOMI INIZIALI */
 	for (int i = 0; i < N_ATOMI_INIT; i++) {
